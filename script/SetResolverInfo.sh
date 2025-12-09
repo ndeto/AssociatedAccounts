@@ -8,7 +8,7 @@
 source .env
 
 # Configuration
-RESOLVER_ADDRESS="0xCE943F957FC46a8d048505E6949e32201a128f84"
+RESOLVER_ADDRESS="0xAE5A879A021982B65A691dFdcE83528e8e13dFd3"
 RPC_URL="$SEPOLIA_RPC_URL"
 PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY"
 
@@ -29,7 +29,7 @@ Query: `eth.ecs.controlled-accounts:<id>` returns YAML of verified parent-child 
   "features": ["controlled-accounts", "text", "data", "addr", "contenthash"],
   "standards": ["ERC-8092", "ERC-7930", "ENSIP-5", "ENSIP-10"],
   "network": "sepolia",
-  "associationsStore": "0x44CcD9b079C4DEf953A6ec9fC7F63cDC0cb14F50",
+  "associationsStore": "0x658CC576192a9e950DCd1BFb0F77F1D75a055D49",
   "docs": "https://github.com/nxt3d/AssociatedAccounts"
 }
 ```'
