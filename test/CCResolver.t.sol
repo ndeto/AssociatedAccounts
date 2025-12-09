@@ -8,7 +8,12 @@ import {AssociatedAccounts} from "../src/AssociatedAccounts.sol";
 import {AssociatedAccountsLib} from "../src/AssociatedAccountsLib.sol";
 import {InteroperableAddress} from "../src/InteroperableAddresses.sol";
 import {Strings} from "lib/openzeppelin-contracts/contracts/utils/Strings.sol";
+import {IERC165} from "lib/openzeppelin-contracts/contracts/interfaces/IERC165.sol";
 import "../src/KeyTypes.sol";
+
+interface IExtendedResolver {
+    function resolve(bytes calldata name, bytes calldata data) external view returns (bytes memory);
+}
 
 contract CCResolverTest is Test {
     CCResolver public resolver;
@@ -321,6 +326,138 @@ contract CCResolverTest is Test {
         vm.prank(notOwner);
         vm.expectRevert(CCResolver.OnlyOwner.selector);
         resolver.setTextRecordPrefix("hacker.prefix:");
+    }
+
+    /* --- ENS Resolver Tests --- */
+    
+    function test_011____setText____________________OwnerCanSetText() public {
+        string memory key = "resolver-info";
+        string memory value = "# CCResolver v1.0";
+        
+        resolver.setText(key, value);
+        
+        bytes32 node = keccak256("test.eth");
+        assertEq(resolver.text(node, key), value);
+    }
+    
+    function test_012____setText____________________NonOwnerCannotSetText() public {
+        string memory key = "avatar";
+        string memory value = "https://example.com/avatar.png";
+        
+        address notOwner = address(0x456);
+        vm.prank(notOwner);
+        vm.expectRevert(CCResolver.OnlyOwner.selector);
+        resolver.setText(key, value);
+    }
+    
+    function test_013____setAddr____________________OwnerCanSetAddress() public {
+        address ethAddr = address(0x5678);
+        
+        resolver.setAddr(ethAddr);
+        
+        bytes32 node = keccak256("test.eth");
+        bytes memory result = resolver.addr(node, 60);
+        assertEq(result, abi.encodePacked(ethAddr));
+    }
+    
+    function test_014____setAddr____________________NonOwnerCannotSetAddress() public {
+        address ethAddr = address(0x5678);
+        
+        address notOwner = address(0x789);
+        vm.prank(notOwner);
+        vm.expectRevert(CCResolver.OnlyOwner.selector);
+        resolver.setAddr(ethAddr);
+    }
+    
+    function test_015____setContenthash_____________OwnerCanSetContenthash() public {
+        bytes memory hash = hex"e301017012204edd2984eeaf3ddf50bac238ec95c5713fb40b5e428b508fdbe55d3b9f155ffe";
+        
+        resolver.setContenthash(hash);
+        
+        bytes32 node = keccak256("test.eth");
+        assertEq(resolver.contenthash(node), hash);
+    }
+    
+    function test_016____setContenthash_____________NonOwnerCannotSetContenthash() public {
+        bytes memory hash = hex"e301017012204edd2984eeaf3ddf50bac238ec95c5713fb40b5e428b508fdbe55d3b9f155ffe";
+        
+        address notOwner = address(0xabc);
+        vm.prank(notOwner);
+        vm.expectRevert(CCResolver.OnlyOwner.selector);
+        resolver.setContenthash(hash);
+    }
+    
+    function test_017____setData____________________OwnerCanSetData() public {
+        string memory key = "proof.data";
+        bytes memory value = abi.encode(uint256(12345));
+        
+        resolver.setData(key, value);
+        
+        bytes32 node = keccak256("test.eth");
+        assertEq(resolver.data(node, key), value);
+    }
+    
+    function test_018____setData____________________NonOwnerCannotSetData() public {
+        string memory key = "proof.data";
+        bytes memory value = abi.encode(uint256(12345));
+        
+        address notOwner = address(0xdef);
+        vm.prank(notOwner);
+        vm.expectRevert(CCResolver.OnlyOwner.selector);
+        resolver.setData(key, value);
+    }
+    
+    function test_019____supportsInterface__________SupportsIERC165() public {
+        assertTrue(resolver.supportsInterface(type(IERC165).interfaceId));
+    }
+    
+    function test_020____supportsInterface__________SupportsIExtendedResolver() public {
+        assertTrue(resolver.supportsInterface(type(IExtendedResolver).interfaceId));
+    }
+
+    function test_021____text________________________ReturnsRegularTextRecord() public {
+        string memory key = "com.twitter";
+        string memory value = "@alice";
+        
+        resolver.setText(key, value);
+        
+        bytes32 node = keccak256("test.eth");
+        string memory result = resolver.text(node, key);
+        assertEq(result, value);
+    }
+
+    function test_022____resolve_____________________SupportsMultipleMethods() public {
+        // Set up various records
+        address ethAddr = address(0x1234);
+        resolver.setAddr(ethAddr);
+        
+        string memory textKey = "com.github";
+        string memory textValue = "alice";
+        resolver.setText(textKey, textValue);
+        
+        bytes memory contentHash = hex"1234567890abcdef";
+        resolver.setContenthash(contentHash);
+        
+        // Test resolve() with different selectors
+        bytes32 node = keccak256("test.eth");
+        
+        // Test addr() via resolve
+        bytes memory addrData = abi.encodeWithSelector(bytes4(0x3b3b57de), node);
+        bytes memory addrResult = resolver.resolve("", addrData);
+        address returnedAddr = abi.decode(addrResult, (address));
+        assertEq(returnedAddr, ethAddr);
+        
+        // Test text() via resolve
+        bytes memory textData = abi.encodeWithSelector(bytes4(0x59d1d43c), node, textKey);
+        bytes memory textResult = resolver.resolve("", textData);
+        string memory returnedText = abi.decode(textResult, (string));
+        assertEq(returnedText, textValue);
+        
+        // Test contenthash() via resolve
+        bytes memory hashData = abi.encodeWithSelector(bytes4(0xbc1c58d1), node);
+        bytes memory hashResult = resolver.resolve("", hashData);
+        bytes memory returnedHash = abi.decode(hashResult, (bytes));
+        assertEq(returnedHash, contentHash);
     }
 
     // Helper function to setup controlled accounts associations
