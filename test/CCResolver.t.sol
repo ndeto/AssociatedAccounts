@@ -29,7 +29,7 @@ contract CCResolverTest is Test {
     function setUp() public {
         // Deploy contracts
         store = new AssociationsStore();
-        resolver = new CCResolver(address(store));
+        resolver = new CCResolver(address(store), "eth.ecs.controlled-accounts:");
         
         // Setup test accounts as ERC-7930 addresses
         parentAddr = vm.addr(parentPrivateKey);
@@ -41,7 +41,15 @@ contract CCResolverTest is Test {
         child2Account = InteroperableAddress.formatEvmV1(block.chainid, child2Addr);
     }
 
-    function test_RegisterControlledAccounts() public {
+    /* --- Test Dividers --- */
+    
+    function test1000________________________________________________________________________________() public pure {}
+    function test1100____________________CC_RESOLVER_TESTS______________________________________() public pure {}
+    function test1200________________________________________________________________________________() public pure {}
+    
+    /* --- Registration Tests --- */
+    
+    function test_001____registerControlledAccounts__CanRegisterTwoChildren() public {
         // First, create associations between parent and children
         _setupControlledAccounts();
         
@@ -64,7 +72,7 @@ contract CCResolverTest is Test {
         assertEq(keccak256(ca.childAccounts[1]), keccak256(child2Account));
     }
 
-    function test_IsValid() public {
+    function test_006____text________________________ReturnsEmptyForExpiredAssociation() public {
         _setupControlledAccounts();
         
         bytes[] memory children = new bytes[](2);
@@ -77,7 +85,7 @@ contract CCResolverTest is Test {
         assertTrue(resolver.isValid(id));
     }
 
-    function test_TextRecordResolution() public {
+    function test_002____text________________________ReturnsYAMLForValidId() public {
         _setupControlledAccounts();
         
         bytes[] memory children = new bytes[](2);
@@ -88,7 +96,7 @@ contract CCResolverTest is Test {
         
         // Resolve via ENS text record
         bytes32 node = keccak256("test.eth");
-        string memory key = string(abi.encodePacked("controlled-accounts:", Strings.toString(id)));
+        string memory key = string(abi.encodePacked("eth.ecs.controlled-accounts:", Strings.toString(id)));
         
         string memory result = resolver.text(node, key);
         
@@ -107,7 +115,7 @@ contract CCResolverTest is Test {
         console2.log(result);
     }
 
-    function test_ResolveFunction() public {
+    function test_003____resolve_____________________ReturnsYAMLForValidId() public {
         _setupControlledAccounts();
         
         bytes[] memory children = new bytes[](2);
@@ -118,7 +126,7 @@ contract CCResolverTest is Test {
         
         // Call resolve() like ENS would
         bytes32 node = keccak256("test.eth");
-        string memory key = string(abi.encodePacked("controlled-accounts:", Strings.toString(id)));
+        string memory key = string(abi.encodePacked("eth.ecs.controlled-accounts:", Strings.toString(id)));
         
         // Encode the text(bytes32,string) call
         bytes memory data = abi.encodeWithSelector(
@@ -168,7 +176,7 @@ contract CCResolverTest is Test {
         return false;
     }
 
-    function test_InvalidDataReturnsEmptyOnQuery() public {
+    function test_005____text________________________ReturnsEmptyForInvalidData() public {
         // Create an association with wrong data
         AssociatedAccounts.AssociatedAccountRecord memory record = AssociatedAccounts.AssociatedAccountRecord({
             initiator: parentAccount,
@@ -208,14 +216,14 @@ contract CCResolverTest is Test {
         
         // But query returns empty because verification fails at read time
         bytes32 node = keccak256("test.eth");
-        string memory key = string(abi.encodePacked("controlled-accounts:", Strings.toString(id)));
+        string memory key = string(abi.encodePacked("eth.ecs.controlled-accounts:", Strings.toString(id)));
         string memory result = resolver.text(node, key);
         
         // Should return empty string due to invalid data
         assertEq(bytes(result).length, 0, "Should return empty for invalid data");
     }
 
-    function test_RevokedAssociationReturnsEmptyOnQuery() public {
+    function test_004____text________________________ReturnsEmptyForRevokedAssociation() public {
         _setupControlledAccounts();
         
         bytes[] memory children = new bytes[](2);
@@ -227,7 +235,7 @@ contract CCResolverTest is Test {
         
         // Initially works
         bytes32 node = keccak256("test.eth");
-        string memory key = string(abi.encodePacked("controlled-accounts:", Strings.toString(id)));
+        string memory key = string(abi.encodePacked("eth.ecs.controlled-accounts:", Strings.toString(id)));
         string memory result = resolver.text(node, key);
         assertTrue(bytes(result).length > 0, "Should return data initially");
         
@@ -249,7 +257,7 @@ contract CCResolverTest is Test {
         console2.log("Read-time verification correctly detected revocation!");
     }
 
-    function test_MultipleRegistrationsGetUniqueIds() public {
+    function test_007____registerControlledAccounts__AssignsUniqueSequentialIds() public {
         _setupControlledAccounts();
         
         bytes[] memory children = new bytes[](2);
@@ -268,11 +276,51 @@ contract CCResolverTest is Test {
         assertEq(id2, 1, "Second ID should be 1");
     }
 
-    function test_RevertIfNoChildAccounts() public {
+    /* --- Error Cases --- */
+    
+    function test_010____registerControlledAccounts__RevertsIfNoChildren() public {
         bytes[] memory children = new bytes[](0);
         
         vm.expectRevert(CCResolver.NoChildAccounts.selector);
         resolver.registerControlledAccounts(parentAccount, children);
+    }
+
+    /* --- Prefix Management Tests --- */
+    
+    function test_008____setTextRecordPrefix_________UpdatesPrefixSuccessfully() public {
+        _setupControlledAccounts();
+        
+        bytes[] memory children = new bytes[](2);
+        children[0] = child1Account;
+        children[1] = child2Account;
+        
+        uint256 id = resolver.registerControlledAccounts(parentAccount, children);
+        
+        // Query with original prefix
+        bytes32 node = keccak256("test.eth");
+        string memory key1 = string(abi.encodePacked("eth.ecs.controlled-accounts:", Strings.toString(id)));
+        string memory result1 = resolver.text(node, key1);
+        assertTrue(bytes(result1).length > 0, "Should resolve with original prefix");
+        
+        // Update prefix
+        resolver.setTextRecordPrefix("new.prefix:");
+        
+        // Old key should not work
+        string memory resultOld = resolver.text(node, key1);
+        assertEq(bytes(resultOld).length, 0, "Old prefix should not work after update");
+        
+        // New key should work
+        string memory key2 = string(abi.encodePacked("new.prefix:", Strings.toString(id)));
+        string memory result2 = resolver.text(node, key2);
+        assertTrue(bytes(result2).length > 0, "Should resolve with new prefix");
+    }
+
+    function test_009____setTextRecordPrefix_________OnlyOwnerCanUpdate() public {
+        address notOwner = address(0x123);
+        
+        vm.prank(notOwner);
+        vm.expectRevert(CCResolver.OnlyOwner.selector);
+        resolver.setTextRecordPrefix("hacker.prefix:");
     }
 
     // Helper function to setup controlled accounts associations

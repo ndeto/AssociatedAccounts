@@ -34,6 +34,12 @@ contract CCResolver is IExtendedResolver {
     /// @notice Global nonce for auto-assigning IDs
     uint256 public nextId;
 
+    /// @notice Text record prefix (updatable)
+    string public textRecordPrefix;
+
+    /// @notice Contract owner (can update prefix)
+    address public owner;
+
     /// @notice Mapping from controlled accounts ID to the struct
     mapping(uint256 => ControlledAccounts) public controlledAccountsRegistry;
 
@@ -54,9 +60,18 @@ contract CCResolver is IExtendedResolver {
     error InvalidAssociation(bytes32 associationId);
     error InvalidData(bytes32 associationId, bytes actualData);
     error WrongAccountRoles(bytes32 associationId);
+    error OnlyOwner();
 
-    constructor(address _associationsStore) {
+    /// @notice Modifier to restrict access to owner
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert OnlyOwner();
+        _;
+    }
+
+    constructor(address _associationsStore, string memory _textRecordPrefix) {
         associationsStore = AssociationsStore(_associationsStore);
+        textRecordPrefix = _textRecordPrefix;
+        owner = msg.sender;
     }
 
     /// @notice Register a new set of controlled accounts
@@ -111,16 +126,30 @@ contract CCResolver is IExtendedResolver {
         revert("Unsupported function");
     }
 
+    /// @notice Update the text record prefix
+    /// @dev Only callable by owner
+    /// @param newPrefix The new prefix (e.g., "eth.ecs.controlled-accounts:")
+    function setTextRecordPrefix(string calldata newPrefix) external onlyOwner {
+        textRecordPrefix = newPrefix;
+    }
+
+    /// @notice Transfer ownership
+    /// @dev Only callable by current owner
+    /// @param newOwner The new owner address
+    function transferOwnership(address newOwner) external onlyOwner {
+        owner = newOwner;
+    }
+
     /// @notice Internal text record resolver
-    /// @dev Resolves text records in format: "controlled-accounts:<id>"
+    /// @dev Resolves text records in format: "<prefix><id>"
     /// @param node The ENS node (namehash)
     /// @param key The text record key
     /// @return The YAML-formatted ControlledAccounts struct if valid, empty string otherwise
     function _resolveText(bytes32 node, string memory key) internal view returns (string memory) {
         // Parse the key to extract the ID
-        // Expected format: "controlled-accounts:<id>"
+        // Expected format: "<textRecordPrefix><id>"
         bytes memory keyBytes = bytes(key);
-        bytes memory prefix = bytes("controlled-accounts:");
+        bytes memory prefix = bytes(textRecordPrefix);
         
         if (keyBytes.length <= prefix.length) {
             return "";

@@ -29,9 +29,11 @@ contract DeployCCResolverScript is Script {
             store = AssociationsStore(associationsStoreAddress);
         }
 
-        // Deploy CCResolver
+        // Deploy CCResolver with initial prefix
+        string memory initialPrefix = "eth.ecs.controlled-accounts:";
         console2.log("Deploying CCResolver...");
-        CCResolver resolver = new CCResolver(address(store));
+        console2.log("Initial prefix:", initialPrefix);
+        CCResolver resolver = new CCResolver(address(store), initialPrefix);
         console2.log("CCResolver deployed at:", address(resolver));
 
         vm.stopBroadcast();
