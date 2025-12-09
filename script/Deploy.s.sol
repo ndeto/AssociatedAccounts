@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.26;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
@@ -11,7 +11,7 @@ import {ProxyAdmin} from "lib/openzeppelin-contracts/contracts/proxy/transparent
 /// @notice Deploys the AssociationsStore contract behind a Transparent Upgradeable Proxy
 contract Deploy is Script {
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOY_PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
         
         vm.startBroadcast(deployerPrivateKey);

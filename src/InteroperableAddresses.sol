@@ -30,7 +30,9 @@ library InteroperableAddress {
         pure
         returns (bytes memory)
     {
-        require(chainReference.length > 0 || addr.length > 0, InteroperableAddressEmptyReferenceAndAddress());
+        if (!(chainReference.length > 0 || addr.length > 0)) {
+            revert InteroperableAddressEmptyReferenceAndAddress();
+        }
         return abi.encodePacked(
             bytes2(0x0001), chainType, chainReference.length.toUint8(), chainReference, addr.length.toUint8(), addr
         );
@@ -71,7 +73,9 @@ library InteroperableAddress {
     {
         bool success;
         (success, chainType, chainReference, addr) = tryParseV1(self);
-        require(success, InteroperableAddressParsingError(self));
+        if (!success) {
+            revert InteroperableAddressParsingError(self);
+        }
     }
 
     /**
@@ -84,7 +88,9 @@ library InteroperableAddress {
     {
         bool success;
         (success, chainType, chainReference, addr) = tryParseV1Calldata(self);
-        require(success, InteroperableAddressParsingError(self));
+        if (!success) {
+            revert InteroperableAddressParsingError(self);
+        }
     }
 
     /**
@@ -160,7 +166,9 @@ library InteroperableAddress {
     function parseEvmV1(bytes memory self) internal pure returns (uint256 chainId, address addr) {
         bool success;
         (success, chainId, addr) = tryParseEvmV1(self);
-        require(success, InteroperableAddressParsingError(self));
+        if (!success) {
+            revert InteroperableAddressParsingError(self);
+        }
     }
 
     /**
@@ -169,7 +177,9 @@ library InteroperableAddress {
     function parseEvmV1Calldata(bytes calldata self) internal pure returns (uint256 chainId, address addr) {
         bool success;
         (success, chainId, addr) = tryParseEvmV1Calldata(self);
-        require(success, InteroperableAddressParsingError(self));
+        if (!success) {
+            revert InteroperableAddressParsingError(self);
+        }
     }
 
     /**
