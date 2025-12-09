@@ -9,6 +9,7 @@ CCResolver allows you to:
 2. Verify relationships through cryptographic signatures stored in AssociationsStore
 3. Query controlled accounts via ENS text records with real-time signature verification
 4. Support K1 (secp256k1 EOAs) and ERC-1271 (smart contract wallets on same chain)
+5. Update the text record prefix without redeployment (owner-controlled)
 
 ## Architecture
 
@@ -18,7 +19,7 @@ CCResolver allows you to:
     │  (example.eth)  │
     └────────┬────────┘
              │
-             │ text("controlled-accounts:<id>")
+             │ text("eth.ecs.controlled-accounts:<id>")
              ▼
 ┌─────────────────────────────────────────┐
 │           CCResolver                    │
@@ -44,7 +45,7 @@ CCResolver allows you to:
 
 ```solidity
 struct ControlledAccounts {
-    bytes32 id;                  // Unique identifier
+    uint256 id;                  // Auto-assigned unique identifier (sequential)
     bytes parentAccount;         // Parent account (ERC-7930 format)
     bytes[] childAccounts;       // Array of controlled accounts (ERC-7930 format)
     uint256 registeredAt;        // Registration timestamp
@@ -102,16 +103,16 @@ associationsStore.storeAssociation(sar);
 
 ### 2. Registering Controlled Accounts
 
-Once associations exist, register them with CCResolver:
+Once associations exist, register them with CCResolver. The ID is auto-assigned:
 
 ```solidity
-bytes32 id = keccak256("my-controlled-accounts");
 bytes memory parent = InteroperableAddress.formatEvmV1(chainId, parentAddress);
 bytes[] memory children = new bytes[](2);
 children[0] = InteroperableAddress.formatEvmV1(chainId, child1Address);
 children[1] = InteroperableAddress.formatEvmV1(chainId, child2Address);
 
-ccResolver.registerControlledAccounts(id, parent, children);
+// Returns auto-assigned ID (starting from 0)
+uint256 id = ccResolver.registerControlledAccounts(parent, children);
 ```
 
 ### 3. Querying via ENS
@@ -121,7 +122,7 @@ Query controlled accounts through the ENS Extended Resolver interface:
 ```solidity
 // Option 1: Via resolve() (standard ENS Extended Resolver)
 bytes32 node = namehash("example.eth");
-string memory key = string(abi.encodePacked("controlled-accounts:", id));
+string memory key = string(abi.encodePacked("eth.ecs.controlled-accounts:", Strings.toString(id)));
 
 // Encode the text(bytes32,string) call
 bytes memory data = abi.encodeWithSelector(
@@ -143,7 +144,7 @@ string memory yamlOutput = ccResolver.text(node, key);
 **YAML Output Format:**
 
 ```yaml
-id: "0x585df73c7d2a02cd3f422c62bb0a924f3f23b4cf3f8286dd47d15ddb2246adde"
+id: 0
 registeredAt: 1234567890
 parent: "0x00010000027a69147e5f4552091a69125d5dfcb7b8c2659029395bdf"
 children:
@@ -176,10 +177,10 @@ Off-chain applications can easily parse the YAML output:
 ```javascript
 import yaml from 'js-yaml';
 
-const yamlOutput = await resolver.text(node, `controlled-accounts:${id}`);
+const yamlOutput = await resolver.text(node, `eth.ecs.controlled-accounts:${id}`);
 const data = yaml.load(yamlOutput);
 
-console.log('ID:', data.id);
+console.log('ID:', data.id);          // Number (e.g., 0, 1, 2)
 console.log('Parent:', data.parent);
 console.log('Children:', data.children);
 ```
@@ -188,10 +189,10 @@ console.log('Children:', data.children);
 ```python
 import yaml
 
-yaml_output = resolver.functions.text(node, f"controlled-accounts:{id}").call()
+yaml_output = resolver.functions.text(node, f"eth.ecs.controlled-accounts:{id}").call()
 data = yaml.safe_load(yaml_output)
 
-print(f"ID: {data['id']}")
+print(f"ID: {data['id']}")            # Integer
 print(f"Parent: {data['parent']}")
 print(f"Children: {data['children']}")
 ```
@@ -214,6 +215,31 @@ CCResolver supports the following key types through AssociationsStore:
 
 **Important**: ERC-1271 signatures only work when the smart contract wallet is on the same chain as the CCResolver deployment. Cross-chain ERC-1271 validation is not currently supported because it requires making contract calls.
 
+## Owner Functions
+
+CCResolver includes owner-controlled functions for managing the text record prefix:
+
+```solidity
+// Update the text record prefix (owner only)
+function setTextRecordPrefix(string calldata newPrefix) external onlyOwner
+
+// Transfer ownership (owner only)
+function transferOwnership(address newOwner) external onlyOwner
+
+// Public state variables
+string public textRecordPrefix;  // Current prefix (default: "eth.ecs.controlled-accounts:")
+address public owner;             // Contract owner
+```
+
+**Example:**
+```solidity
+// Change prefix to support different namespace
+ccResolver.setTextRecordPrefix("new.namespace:");
+
+// Transfer ownership
+ccResolver.transferOwnership(newOwnerAddress);
+```
+
 ## Security Considerations
 
 1. **Read-Time Verification**: Verification happens at query time, not registration time
@@ -225,6 +251,8 @@ CCResolver supports the following key types through AssociationsStore:
 4. **Data Integrity**: The `"ControlledAccount"` data field must be present
 5. **Role Verification**: Parent must be initiator, child must be approver
 6. **Graceful Failure**: Invalid associations return empty string instead of reverting
+7. **Owner Control**: Only the owner can update the text record prefix or transfer ownership
+8. **Sequential IDs**: IDs are auto-assigned sequentially (0, 1, 2, ...) to prevent squatting
 
 ## Deployment
 
@@ -240,7 +268,7 @@ forge script script/DeployCCResolver.s.sol:DeployCCResolverScript \
 
 Set environment variables:
 ```bash
-export PRIVATE_KEY=0x...
+export DEPLOYER_PRIVATE_KEY=0x...
 export ASSOCIATIONS_STORE_ADDRESS=0x...  # Optional
 ```
 
@@ -253,7 +281,7 @@ If `ASSOCIATIONS_STORE_ADDRESS` is not set, a new AssociationsStore will be depl
 ### ControlledAccountsRegistered
 ```solidity
 event ControlledAccountsRegistered(
-    bytes32 indexed id,
+    uint256 indexed id,
     bytes parentAccount,
     bytes[] childAccounts,
     address registrar
@@ -266,13 +294,12 @@ event ControlledAccountsRegistered(
 
 | Error | Description |
 |-------|-------------|
-| `InvalidId()` | ID is zero |
-| `IdAlreadyExists()` | ID already registered |
 | `IdNotFound()` | ID doesn't exist |
 | `NoChildAccounts()` | Empty children array |
 | `InvalidAssociation(bytes32)` | Association validation failed |
 | `InvalidData(bytes32, bytes)` | Data field doesn't contain "ControlledAccount" |
 | `WrongAccountRoles(bytes32)` | Parent/child roles don't match initiator/approver |
+| `OnlyOwner()` | Caller is not the owner |
 
 ## Testing
 
@@ -306,6 +333,16 @@ interface IExtendedResolver {
         external view returns (bytes memory);
 }
 ```
+
+### Text Record Key Format
+
+By default, text records use the prefix `eth.ecs.controlled-accounts:` followed by the numeric ID:
+
+- `eth.ecs.controlled-accounts:0`
+- `eth.ecs.controlled-accounts:1`
+- `eth.ecs.controlled-accounts:2`
+
+The owner can update this prefix using `setTextRecordPrefix()` to support different namespaces without redeployment.
 
 ## License
 
