@@ -256,7 +256,36 @@ ccResolver.transferOwnership(newOwnerAddress);
 
 ## Deployment
 
-### Deploy with Existing AssociationsStore
+### Live Deployments
+
+#### Ethereum Sepolia (Testnet)
+- **CCResolver**: [`0xCE943F957FC46a8d048505E6949e32201a128f84`](https://sepolia.etherscan.io/address/0xce943f957fc46a8d048505e6949e32201a128f84)
+- **AssociationsStore**: [`0x44CcD9b079C4DEf953A6ec9fC7F63cDC0cb14F50`](https://sepolia.etherscan.io/address/0x44ccd9b079c4def953a6ec9fc7f63cdc0cb14f50)
+- **Text Record Prefix**: `eth.ecs.controlled-accounts:`
+- **Status**: ✅ Live with example registrations
+
+**Live Example on Sepolia:**
+```javascript
+// Query controlled accounts ID 0
+const node = ethers.namehash("example.eth");
+const yaml = await ccResolver.text(node, "eth.ecs.controlled-accounts:0");
+
+// Returns:
+// id: 0
+// registeredAt: 1765302216
+// parent: "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
+// children:
+//   - "0x0001000003aa36a714f935f966a073746a9ee0f6a685a41da23a64e1d1"
+//   - "0x0001000003aa36a714cc8d7b159eafa8a2c4ca5c88c3f6b760761dbf28"
+```
+
+#### Base Sepolia (Testnet)
+- **CCResolver**: [`0x91710e42A6f587d8728ccF1cB09Ded39FF4e456d`](https://sepolia.basescan.org/address/0x91710e42a6f587d8728ccf1cb09ded39ff4e456d)
+- **AssociationsStore**: [`0x7Ed0BA8478CAAEA6A2Bc7368044b12D831129486`](https://sepolia.basescan.org/address/0x7ed0ba8478caaea6a2bc7368044b12d831129486)
+
+### Deploy Your Own
+
+#### With Existing AssociationsStore
 
 ```bash
 forge script script/DeployCCResolver.s.sol:DeployCCResolverScript \
@@ -272,7 +301,7 @@ export DEPLOYER_PRIVATE_KEY=0x...
 export ASSOCIATIONS_STORE_ADDRESS=0x...  # Optional
 ```
 
-### Deploy New Stack
+#### Deploy New Stack
 
 If `ASSOCIATIONS_STORE_ADDRESS` is not set, a new AssociationsStore will be deployed automatically.
 
@@ -303,11 +332,42 @@ event ControlledAccountsRegistered(
 
 ## Testing
 
-Run the test suite:
+### Run Test Suite
 
 ```bash
 forge test --match-contract CCResolverTest -vv
 ```
+
+All tests use numbered naming convention for better organization:
+- `test_001____registerControlledAccounts__CanRegisterTwoChildren()`
+- `test_002____text________________________ReturnsYAMLForValidId()`
+- `test_008____setTextRecordPrefix_________UpdatesPrefixSuccessfully()`
+- etc.
+
+### Run Example Script
+
+Create and register controlled accounts on a live network:
+
+```bash
+# Set up environment variables
+export ASSOCIATIONS_STORE_ADDRESS=0x44CcD9b079C4DEf953A6ec9fC7F63cDC0cb14F50  # Sepolia
+export CC_RESOLVER_ADDRESS=0xCE943F957FC46a8d048505E6949e32201a128f84      # Sepolia
+export PARENT_PRIVATE_KEY=0x...
+export CHILD1_PRIVATE_KEY=0x...
+export CHILD2_PRIVATE_KEY=0x...
+export DEPLOYER_PRIVATE_KEY=0x...
+
+# Run the example script
+forge script script/RegisterControlledAccountsExample.s.sol:RegisterControlledAccountsExampleScript \
+    --rpc-url $SEPOLIA_RPC_URL \
+    --broadcast \
+    -vv
+```
+
+The script will:
+1. Create associations between parent and child accounts
+2. Register controlled accounts in CCResolver
+3. Verify the registration and display YAML output
 
 ## Integration with ENS
 
