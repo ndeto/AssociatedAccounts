@@ -1,15 +1,17 @@
-# CCResolver - Controlled Accounts ENS Extended Resolver
+# CCResolver v0.1.0 - Full ENS Resolver with Controlled Accounts
 
-CCResolver is an ENS Extended Resolver that provides verifiable on-chain proof of controlled accounts through cryptographic signatures using the ERC-8092 Associated Accounts standard.
+CCResolver is a complete ENS Extended Resolver that provides verifiable on-chain proof of controlled accounts through cryptographic signatures using the ERC-8092 Associated Accounts standard, plus full support for standard ENS records.
 
 ## Overview
 
 CCResolver allows you to:
-1. Register a parent account with multiple controlled child accounts
-2. Verify relationships through cryptographic signatures stored in AssociationsStore
-3. Query controlled accounts via ENS text records with real-time signature verification
-4. Support K1 (secp256k1 EOAs) and ERC-1271 (smart contract wallets on same chain)
-5. Update the text record prefix without redeployment (owner-controlled)
+1. **Controlled Accounts**: Register parent accounts with multiple controlled child accounts
+2. **Cryptographic Verification**: Verify relationships through EIP-712 signatures stored in AssociationsStore
+3. **Real-Time Validation**: Query controlled accounts with real-time signature verification
+4. **Full ENS Support**: Set and query text, data, addr, and contenthash records
+5. **Multi-Coin Addresses**: Support for multiple cryptocurrency address types (ENSIP-11)
+6. **ERC-165 Compatible**: Proper interface detection support
+7. **Updatable Prefix**: Owner can update controlled-accounts prefix without redeployment
 
 ## Architecture
 
@@ -215,29 +217,75 @@ CCResolver supports the following key types through AssociationsStore:
 
 **Important**: ERC-1271 signatures only work when the smart contract wallet is on the same chain as the CCResolver deployment. Cross-chain ERC-1271 validation is not currently supported because it requires making contract calls.
 
-## Owner Functions
+## ENS Resolver Functions (v0.1.0)
 
-CCResolver includes owner-controlled functions for managing the text record prefix:
+### Setting Records (Owner Only)
+
+CCResolver v0.1.0 includes full ENS resolver functionality:
 
 ```solidity
-// Update the text record prefix (owner only)
+// Text Records (ENSIP-5)
+function setText(string calldata _key, string calldata _value) external onlyOwner
+
+// Data Records (binary data storage)
+function setData(string calldata _key, bytes calldata _data) external onlyOwner
+
+// Address Records (ENSIP-11 multi-coin)
+function setAddr(address _addr) external onlyOwner  // ETH address
+function setAddr(uint256 _coinType, bytes calldata _value) external onlyOwner
+
+// Contenthash (IPFS/Arweave)
+function setContenthash(bytes calldata _hash) external onlyOwner
+
+// Prefix & Ownership Management
 function setTextRecordPrefix(string calldata newPrefix) external onlyOwner
-
-// Transfer ownership (owner only)
 function transferOwnership(address newOwner) external onlyOwner
-
-// Public state variables
-string public textRecordPrefix;  // Current prefix (default: "eth.ecs.controlled-accounts:")
-address public owner;             // Contract owner
 ```
 
-**Example:**
-```solidity
-// Change prefix to support different namespace
-ccResolver.setTextRecordPrefix("new.namespace:");
+### Querying Records (Public)
 
-// Transfer ownership
-ccResolver.transferOwnership(newOwnerAddress);
+```solidity
+// Get text record
+function text(bytes32 node, string calldata _key) external view returns (string memory)
+
+// Get data record
+function data(bytes32 node, string calldata _key) external view returns (bytes memory)
+
+// Get address (coin type 60 = Ethereum)
+function addr(bytes32 node, uint256 _coinType) external view returns (bytes memory)
+
+// Get contenthash
+function contenthash(bytes32 node) external view returns (bytes memory)
+
+// Check interface support
+function supportsInterface(bytes4 interfaceId) external pure returns (bool)
+```
+
+**Example Usage:**
+```javascript
+// Set resolver-info
+await resolver.setText("resolver-info", "# CCResolver v0.1.0...");
+
+// Set avatar
+await resolver.setText("avatar", "https://example.com/avatar.png");
+
+// Set social profiles
+await resolver.setText("com.twitter", "@alice");
+await resolver.setText("com.github", "alice");
+
+// Set ETH address
+await resolver.setAddr("0x1234567890123456789012345678901234567890");
+
+// Set IPFS contenthash
+const ipfsHash = "0xe301017012204edd2984eeaf3ddf50bac238ec95c5713fb40b5e428b508fdbe55d3b9f155ffe";
+await resolver.setContenthash(ipfsHash);
+
+// Query records
+const node = ethers.namehash("yourname.eth");
+const resolverInfo = await resolver.text(node, "resolver-info");
+const avatar = await resolver.text(node, "avatar");
+const ethAddr = await resolver.addr(node, 60);
+const contentHash = await resolver.contenthash(node);
 ```
 
 ## Security Considerations
@@ -258,30 +306,36 @@ ccResolver.transferOwnership(newOwnerAddress);
 
 ### Live Deployments
 
-#### Ethereum Sepolia (Testnet)
-- **CCResolver**: [`0xCE943F957FC46a8d048505E6949e32201a128f84`](https://sepolia.etherscan.io/address/0xce943f957fc46a8d048505e6949e32201a128f84)
-- **AssociationsStore**: [`0x44CcD9b079C4DEf953A6ec9fC7F63cDC0cb14F50`](https://sepolia.etherscan.io/address/0x44ccd9b079c4def953a6ec9fc7f63cdc0cb14f50)
+#### Ethereum Sepolia (Testnet) - v0.1.0 ⭐ LATEST
+- **CCResolver v0.1.0**: [`0xAE5A879A021982B65A691dFdcE83528e8e13dFd3`](https://sepolia.etherscan.io/address/0xae5a879a021982b65a691dfdce83528e8e13dfd3)
+- **AssociationsStore**: [`0x658CC576192a9e950DCd1BFb0F77F1D75a055D49`](https://sepolia.etherscan.io/address/0x658cc576192a9e950dcd1bfb0f77f1d75a055d49)
 - **Text Record Prefix**: `eth.ecs.controlled-accounts:`
-- **Status**: ✅ Live with example registrations
+- **Version**: 0.1.0
+- **Deployed**: December 9, 2025
+- **Status**: ✅ Live with full ENS resolver support
 
-**Live Example on Sepolia:**
-```javascript
-// Query controlled accounts ID 0
-const node = ethers.namehash("example.eth");
-const yaml = await ccResolver.text(node, "eth.ecs.controlled-accounts:0");
+**Features:**
+- ✅ Controlled accounts verification
+- ✅ Text records (ENSIP-5)
+- ✅ Data records
+- ✅ Multi-coin addresses (ENSIP-11)
+- ✅ Contenthash support
+- ✅ ERC-165 interface detection
+- ✅ resolver-info metadata set
 
-// Returns:
-// id: 0
-// registeredAt: 1765302216
-// parent: "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
-// children:
-//   - "0x0001000003aa36a714f935f966a073746a9ee0f6a685a41da23a64e1d1"
-//   - "0x0001000003aa36a714cc8d7b159eafa8a2c4ca5c88c3f6b760761dbf28"
+**Query resolver-info:**
+```bash
+cast call 0xAE5A879A021982B65A691dFdcE83528e8e13dFd3 \
+  "text(bytes32,string)(string)" \
+  0x0000000000000000000000000000000000000000000000000000000000000000 \
+  "resolver-info" \
+  --rpc-url $SEPOLIA_RPC_URL
 ```
 
-#### Base Sepolia (Testnet)
+#### Base Sepolia (Testnet) - Previous Deployment
 - **CCResolver**: [`0x91710e42A6f587d8728ccF1cB09Ded39FF4e456d`](https://sepolia.basescan.org/address/0x91710e42a6f587d8728ccf1cb09ded39ff4e456d)
 - **AssociationsStore**: [`0x7Ed0BA8478CAAEA6A2Bc7368044b12D831129486`](https://sepolia.basescan.org/address/0x7ed0ba8478caaea6a2bc7368044b12d831129486)
+- **Note**: Controlled accounts only (no full ENS resolver)
 
 ### Deploy Your Own
 
@@ -350,8 +404,8 @@ Create and register controlled accounts on a live network:
 
 ```bash
 # Set up environment variables
-export ASSOCIATIONS_STORE_ADDRESS=0x44CcD9b079C4DEf953A6ec9fC7F63cDC0cb14F50  # Sepolia
-export CC_RESOLVER_ADDRESS=0xCE943F957FC46a8d048505E6949e32201a128f84      # Sepolia
+export ASSOCIATIONS_STORE_ADDRESS=0x658CC576192a9e950DCd1BFb0F77F1D75a055D49  # Sepolia v0.1.0
+export CC_RESOLVER_ADDRESS=0xAE5A879A021982B65A691dFdcE83528e8e13dFd3      # Sepolia v0.1.0
 export PARENT_PRIVATE_KEY=0x...
 export CHILD1_PRIVATE_KEY=0x...
 export CHILD2_PRIVATE_KEY=0x...
@@ -368,6 +422,16 @@ The script will:
 1. Create associations between parent and child accounts
 2. Register controlled accounts in CCResolver
 3. Verify the registration and display YAML output
+
+### Set Resolver Info
+
+Set the resolver-info metadata using the included script:
+
+```bash
+./script/SetResolverInfo.sh
+```
+
+This sets a concise resolver-info text record following the [resolver-info ENSIP standard](https://github.com/nxt3d/ensips/blob/resolver-info-metadata/ensips/resolver-info-text-record.md).
 
 ## Integration with ENS
 
@@ -408,10 +472,24 @@ The owner can update this prefix using `setTextRecordPrefix()` to support differ
 
 MIT
 
+## Version History
+
+- **v0.1.0** (December 9, 2025)
+  - Full ENS resolver support (text, data, addr, contenthash)
+  - ERC-165 interface detection
+  - Comprehensive event logging
+  - resolver-info metadata set
+  - Deployed: `0xAE5A879A021982B65A691dFdcE83528e8e13dFd3` (Sepolia)
+
 ## References
 
 - [ERC-8092: Associated Accounts](https://github.com/ethereum/ERCs/pull/1377)
 - [ERC-7930: Interoperable Address Format](https://eips.ethereum.org/EIPS/eip-7930)
 - [EIP-712: Typed Data Signing](https://eips.ethereum.org/EIPS/eip-712)
 - [ERC-1271: Smart Contract Signatures](https://eips.ethereum.org/EIPS/eip-1271)
+- [ERC-165: Interface Detection](https://eips.ethereum.org/EIPS/eip-165)
+- [ENSIP-5: Text Records](https://docs.ens.domains/ensip/5)
+- [ENSIP-10: Extended Resolver](https://docs.ens.domains/ensip/10)
+- [ENSIP-11: Multi-coin Address Resolution](https://docs.ens.domains/ensip/11)
+- [Resolver-Info Standard](https://github.com/nxt3d/ensips/blob/resolver-info-metadata/ensips/resolver-info-text-record.md)
 
