@@ -107,8 +107,11 @@ contract RegisterControlledAccountsExampleScript is Script {
         console2.log("Is Valid:", isValid);
 
         if (isValid) {
+            // Get the current prefix from the resolver
+            string memory prefix = ccResolver.textRecordPrefix();
+            
             // Query the controlled accounts
-            string memory key = string(abi.encodePacked("controlled-accounts:", vm.toString(controlledAccountsId)));
+            string memory key = string(abi.encodePacked(prefix, vm.toString(controlledAccountsId)));
             bytes32 node = keccak256("example.eth");
             string memory yamlOutput = ccResolver.text(node, key);
 
@@ -121,12 +124,13 @@ contract RegisterControlledAccountsExampleScript is Script {
         console2.log("\n=== Summary ===");
         console2.log("AssociationsStore:", address(associationsStore));
         console2.log("CCResolver:", address(ccResolver));
+        console2.log("Text Record Prefix:", ccResolver.textRecordPrefix());
         console2.log("Controlled Accounts ID:", controlledAccountsId);
         console2.log("Parent:", parentAddress);
         console2.log("Child 1:", child1Address);
         console2.log("Child 2:", child2Address);
         console2.log("\nQuery via ENS:");
-        console2.log("  Key:", string(abi.encodePacked("controlled-accounts:", vm.toString(controlledAccountsId))));
+        console2.log("  Key:", string(abi.encodePacked(ccResolver.textRecordPrefix(), vm.toString(controlledAccountsId))));
     }
 
     /// @notice Creates and stores an association between two accounts
