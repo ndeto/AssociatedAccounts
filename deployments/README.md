@@ -23,6 +23,14 @@ YYYY-MM-DD-<network>-<sequence>.md
 
 See: [2025-12-08-base-sepolia-01.md](./2025-12-08-base-sepolia-01.md)
 
+### Ethereum Sepolia (Testnet)
+
+| Date | Deployment | Contracts |
+|------|-----------|-----------|
+| 2025-12-08 | #02 | AssociationsStore (Proxy), CCResolver |
+
+See: [2025-12-08-sepolia-02.md](./2025-12-08-sepolia-02.md)
+
 ---
 
 ## Quick Reference
@@ -31,6 +39,11 @@ See: [2025-12-08-base-sepolia-01.md](./2025-12-08-base-sepolia-01.md)
 
 **AssociationsStore (Proxy)**: `0x7Ed0BA8478CAAEA6A2Bc7368044b12D831129486`  
 **CCResolver**: `0x91710e42A6f587d8728ccF1cB09Ded39FF4e456d`
+
+### Ethereum Sepolia (Chain ID: 11155111)
+
+**AssociationsStore (Proxy)**: `0x44CcD9b079C4DEf953A6ec9fC7F63cDC0cb14F50`  
+**CCResolver**: `0xdBB090B891297d515d064b0A7663caE116777f6E`
 
 ---
 
