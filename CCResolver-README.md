@@ -307,6 +307,13 @@ const contentHash = await resolver.contenthash(node);
 ### Live Deployments
 
 #### Ethereum Sepolia (Testnet) - v0.1.0 ⭐ LATEST
+
+**ENS Name**: [`controlled-accounts.ecs.eth`](https://app.ens.domains/controlled-accounts.ecs.eth)
+
+The CCResolver is now live as the resolver for `controlled-accounts.ecs.eth` on Sepolia:
+
+- **ECS Name**: `controlled-accounts.ecs.eth`
+- **Owner**: [`0xF8e03bd4436371E0e2F7C02E529b2172fe72b4EF`](https://sepolia.etherscan.io/address/0xF8e03bd4436371E0e2F7C02E529b2172fe72b4EF)
 - **CCResolver v0.1.0**: [`0xAE5A879A021982B65A691dFdcE83528e8e13dFd3`](https://sepolia.etherscan.io/address/0xae5a879a021982b65a691dfdce83528e8e13dfd3)
 - **AssociationsStore**: [`0x658CC576192a9e950DCd1BFb0F77F1D75a055D49`](https://sepolia.etherscan.io/address/0x658cc576192a9e950dcd1bfb0f77f1d75a055d49)
 - **Text Record Prefix**: `eth.ecs.controlled-accounts:`
@@ -329,6 +336,34 @@ cast call 0xAE5A879A021982B65A691dFdcE83528e8e13dFd3 \
   "text(bytes32,string)(string)" \
   0x0000000000000000000000000000000000000000000000000000000000000000 \
   "resolver-info" \
+  --rpc-url $SEPOLIA_RPC_URL
+```
+
+**Query via ENS Name:**
+
+You can now query controlled accounts using the registered ENS name:
+
+```javascript
+// Using ethers.js with ENS support
+const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
+const resolver = await provider.getResolver("controlled-accounts.ecs.eth");
+const controlledAccounts = await resolver.getText("eth.ecs.controlled-accounts:0");
+
+// Returns YAML:
+// id: 0
+// registeredAt: 1765302228
+// parent: "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
+// children:
+//   - "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
+//   - "0x0001000003aa36a714cc8d7b159eafa8a2c4ca5c88c3f6b760761dbf28"
+```
+
+```bash
+# Using cast (requires ENS resolution)
+cast call 0xAE5A879A021982B65A691dFdcE83528e8e13dFd3 \
+  "text(bytes32,string)(string)" \
+  $(cast namehash controlled-accounts.ecs.eth) \
+  "eth.ecs.controlled-accounts:0" \
   --rpc-url $SEPOLIA_RPC_URL
 ```
 
@@ -358,6 +393,35 @@ export ASSOCIATIONS_STORE_ADDRESS=0x...  # Optional
 #### Deploy New Stack
 
 If `ASSOCIATIONS_STORE_ADDRESS` is not set, a new AssociationsStore will be deployed automatically.
+
+### Updating ENS Resolver (for controlled-accounts.ecs.eth)
+
+The ENS name `controlled-accounts.ecs.eth` uses a commit-reveal pattern for security when updating resolvers:
+
+#### Step 1: Commit Update
+```bash
+export NEW_CC_RESOLVER_ADDRESS=0x...  # New resolver address
+export DEPLOYER_PRIVATE_KEY=0x...      # Owner private key
+
+forge script script/CommitResolverUpdate.s.sol:CommitResolverUpdate \
+  --rpc-url $SEPOLIA_RPC_URL \
+  --broadcast \
+  -vv
+
+# Save the UPDATE_SECRET from script output
+```
+
+#### Step 2: Apply Update (after 60 seconds)
+```bash
+export UPDATE_SECRET=0x...  # From step 1 output
+
+forge script script/UpdateResolverAddress.s.sol:UpdateResolverAddress \
+  --rpc-url $SEPOLIA_RPC_URL \
+  --broadcast \
+  -vv
+```
+
+This two-step process prevents frontrunning attacks when updating critical ENS records.
 
 ## Events
 
@@ -435,9 +499,21 @@ This sets a concise resolver-info text record following the [resolver-info ENSIP
 
 ## Integration with ENS
 
+### Live Example: controlled-accounts.ecs.eth
+
+CCResolver v0.1.0 is currently deployed as the resolver for **`controlled-accounts.ecs.eth`** on Sepolia. This provides a working example of the integration.
+
+**Query live controlled accounts:**
+```javascript
+const resolver = await provider.getResolver("controlled-accounts.ecs.eth");
+const accounts = await resolver.getText("eth.ecs.controlled-accounts:0");
+```
+
+### Using CCResolver for Your ENS Name
+
 To use CCResolver as your ENS Extended Resolver:
 
-1. Deploy CCResolver
+1. Deploy CCResolver (or use existing deployment)
 2. Set it as resolver for your ENS name:
    ```solidity
    ensRegistry.setResolver(node, address(ccResolver));
