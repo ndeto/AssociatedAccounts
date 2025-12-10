@@ -177,9 +177,20 @@ Off-chain applications can easily parse the YAML output:
 
 **JavaScript/TypeScript:**
 ```javascript
+import { createPublicClient, http } from 'viem';
+import { sepolia } from 'viem/chains';
 import yaml from 'js-yaml';
 
-const yamlOutput = await resolver.text(node, `eth.ecs.controlled-accounts:${id}`);
+const client = createPublicClient({
+  chain: sepolia,
+  transport: http(),
+});
+
+const yamlOutput = await client.getEnsText({
+  name: 'controlled-accounts.ecs.eth',
+  key: `eth.ecs.controlled-accounts:${id}`,
+});
+
 const data = yaml.load(yamlOutput);
 
 console.log('ID:', data.id);          // Number (e.g., 0, 1, 2)
@@ -263,29 +274,50 @@ function supportsInterface(bytes4 interfaceId) external pure returns (bool)
 
 **Example Usage:**
 ```javascript
+import { createWalletClient, createPublicClient, http, namehash } from 'viem';
+import { sepolia } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
+
+// For writing (owner only)
+const account = privateKeyToAccount('0x...');
+const walletClient = createWalletClient({
+  account,
+  chain: sepolia,
+  transport: http(),
+});
+
 // Set resolver-info
-await resolver.setText("resolver-info", "# CCResolver v0.1.0...");
+await walletClient.writeContract({
+  address: resolverAddress,
+  abi: resolverAbi,
+  functionName: 'setText',
+  args: ['resolver-info', '# CCResolver v0.1.0...'],
+});
 
 // Set avatar
-await resolver.setText("avatar", "https://example.com/avatar.png");
+await walletClient.writeContract({
+  address: resolverAddress,
+  abi: resolverAbi,
+  functionName: 'setText',
+  args: ['avatar', 'https://example.com/avatar.png'],
+});
 
-// Set social profiles
-await resolver.setText("com.twitter", "@alice");
-await resolver.setText("com.github", "alice");
+// For reading (public)
+const client = createPublicClient({
+  chain: sepolia,
+  transport: http(),
+});
 
-// Set ETH address
-await resolver.setAddr("0x1234567890123456789012345678901234567890");
+// Query via ENS
+const resolverInfo = await client.getEnsText({
+  name: 'yourname.eth',
+  key: 'resolver-info',
+});
 
-// Set IPFS contenthash
-const ipfsHash = "0xe301017012204edd2984eeaf3ddf50bac238ec95c5713fb40b5e428b508fdbe55d3b9f155ffe";
-await resolver.setContenthash(ipfsHash);
-
-// Query records
-const node = ethers.namehash("yourname.eth");
-const resolverInfo = await resolver.text(node, "resolver-info");
-const avatar = await resolver.text(node, "avatar");
-const ethAddr = await resolver.addr(node, 60);
-const contentHash = await resolver.contenthash(node);
+const avatar = await client.getEnsText({
+  name: 'yourname.eth',
+  key: 'avatar',
+});
 ```
 
 ## Security Considerations
@@ -344,17 +376,26 @@ cast call 0xAE5A879A021982B65A691dFdcE83528e8e13dFd3 \
 You can now query controlled accounts using the registered ENS name:
 
 ```javascript
-// Using ethers.js with ENS support
-const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
-const resolver = await provider.getResolver("controlled-accounts.ecs.eth");
-const controlledAccounts = await resolver.getText("eth.ecs.controlled-accounts:0");
+// Using viem with ENS support
+import { createPublicClient, http } from 'viem';
+import { sepolia } from 'viem/chains';
+
+const client = createPublicClient({
+  chain: sepolia,
+  transport: http(),
+});
+
+const controlledAccounts = await client.getEnsText({
+  name: 'controlled-accounts.ecs.eth',
+  key: 'eth.ecs.controlled-accounts:0',
+});
 
 // Returns YAML:
 // id: 0
 // registeredAt: 1765302228
 // parent: "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
 // children:
-//   - "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
+//   - "0x0001000003aa36a714f935f966a073746a9ee0f6a685a41da23a64e1d1"
 //   - "0x0001000003aa36a714cc8d7b159eafa8a2c4ca5c88c3f6b760761dbf28"
 ```
 
@@ -497,6 +538,76 @@ Set the resolver-info metadata using the included script:
 
 This sets a concise resolver-info text record following the [resolver-info ENSIP standard](https://github.com/nxt3d/ensips/blob/resolver-info-metadata/ensips/resolver-info-text-record.md).
 
+### Query ENS (JavaScript/Node.js)
+
+Test the live ENS integration using the JavaScript query script:
+
+```bash
+# Install dependencies
+npm install
+
+# Query controlled accounts (ID 0)
+npm run query-ens
+
+# Query specific ID
+npm run query-ens 1
+
+# Query resolver-info metadata
+npm run query-info
+
+# Or use node directly
+node scripts/query-ens.js 0
+```
+
+**Example Output:**
+
+```
+🔍 Querying controlled-accounts.ecs.eth on Sepolia...
+
+📡 Resolving ENS name: controlled-accounts.ecs.eth
+✅ Resolver found: 0xAE5A879A021982B65A691dFdcE83528e8e13dFd3
+
+📋 Querying text record: "eth.ecs.controlled-accounts:0"
+✅ Data found!
+
+📄 Raw YAML Output:
+────────────────────────────────────────────────────────────
+id: 0
+registeredAt: 1765325040
+parent: "0x0001000003aa36a7144d45cd7472f2c46e81734c561a2d0b4b66c8fefe"
+children:
+  - "0x0001000003aa36a714f935f966a073746a9ee0f6a685a41da23a64e1d1"
+  - "0x0001000003aa36a714cc8d7b159eafa8a2c4ca5c88c3f6b760761dbf28"
+────────────────────────────────────────────────────────────
+
+🔓 Decoded Data:
+────────────────────────────────────────────────────────────
+ID: 0
+Registered At: 1765325040 (2025-12-10T00:04:00.000Z)
+
+👤 Parent Account:
+   Address: 0x4d45cd7472f2c46e81734c561a2d0b4b66c8fefe
+   Chain: 11155111 (EIP-155)
+
+👥 Controlled Accounts (2):
+   1. 0xf935f966a073746a9ee0f6a685a41da23a64e1d1
+      Chain: 11155111
+   2. 0xcc8d7b159eafa8a2c4ca5c88c3f6b760761dbf28
+      Chain: 11155111
+────────────────────────────────────────────────────────────
+
+✨ Query completed successfully!
+```
+
+The script uses **viem** for ENS resolution and demonstrates:
+- ✅ Live ENS name resolution (`controlled-accounts.ecs.eth`)
+- ✅ Text record queries via `getEnsText()`
+- ✅ YAML parsing with `js-yaml`
+- ✅ ERC-7930 address decoding
+- ✅ Human-readable output with Etherscan links
+
+See [`scripts/README.md`](../scripts/README.md) for more details.
+
 ## Integration with ENS
 
 ### Live Example: controlled-accounts.ecs.eth
@@ -505,8 +616,10 @@ CCResolver v0.1.0 is currently deployed as the resolver for **`controlled-accoun
 
 **Query live controlled accounts:**
 ```javascript
-const resolver = await provider.getResolver("controlled-accounts.ecs.eth");
-const accounts = await resolver.getText("eth.ecs.controlled-accounts:0");
+const accounts = await client.getEnsText({
+  name: 'controlled-accounts.ecs.eth',
+  key: 'eth.ecs.controlled-accounts:0',
+});
 ```
 
 ### Using CCResolver for Your ENS Name

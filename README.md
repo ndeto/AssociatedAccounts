@@ -11,7 +11,7 @@ This repo implements:
 
 ## Deployments
 
-### Ethereum Sepolia (Testnet) ⭐ LATEST
+### Ethereum Sepolia (Testnet)
 
 **CCResolver v0.1.0** - Full ENS Resolver with Controlled Accounts
 - **Address**: [`0xAE5A879A021982B65A691dFdcE83528e8e13dFd3`](https://sepolia.etherscan.io/address/0xae5a879a021982b65a691dfdce83528e8e13dfd3)
@@ -32,39 +32,6 @@ This repo implements:
 
 See detailed deployment info: [`deployments/2025-12-09-sepolia-04.md`](./deployments/2025-12-09-sepolia-04.md)
 
----
-
-### Base Sepolia (Testnet)
-
-**AssociationsStore** - Deployed behind a Transparent Upgradeable Proxy
-
-| Contract | Address | Link |
-|----------|---------|------|
-| **Proxy** | `0x7Ed0BA8478CAAEA6A2Bc7368044b12D831129486` | [View on BaseScan](https://sepolia.basescan.org/address/0x7Ed0BA8478CAAEA6A2Bc7368044b12D831129486) |
-| Implementation | `0x3b01b5e85E2E146dD82fe83C3dF2C60D9Fd75d3B` | [View on BaseScan](https://sepolia.basescan.org/address/0x3b01b5e85E2E146dD82fe83C3dF2C60D9Fd75d3B) |
-| ProxyAdmin | `0x0EE3f79a3f34d35Ac50Ae5F8F57e1E589a85bdC0` | [View on BaseScan](https://sepolia.basescan.org/address/0x0EE3f79a3f34d35Ac50Ae5F8F57e1E589a85bdC0) |
-
-**CCResolver** (Controlled Accounts Only)
-- **Address**: [`0x91710e42A6f587d8728ccF1cB09Ded39FF4e456d`](https://sepolia.basescan.org/address/0x91710e42a6f587d8728ccf1cb09ded39ff4e456d)
-
-> **Note:** Always interact with the Proxy address. The implementation contract contains the logic, but the proxy maintains the state and is upgradeable.
-
-See all deployments: [`deployments/README.md`](./deployments/README.md) 
-
-
-## Documentation
-
-The ERC draft can be found in this PR (will update to canonical link once merged):
-https://github.com/ethereum/ERCs/pull/1377/files
-
-## Installation
-
-### As a Foundry dependency
-
-```shell
-forge install stevieraykatz/AssociatedAccounts
-```
-
 ## Development
 
 ### Build
@@ -76,7 +43,13 @@ forge build
 ### Test
 
 ```shell
+# Solidity tests
 forge test
+
+# ENS integration test (JavaScript)
+npm install
+npm run query-ens      # Query controlled accounts ID 0
+npm run query-info     # Query resolver-info metadata
 ```
 
 ### Format
@@ -84,3 +57,20 @@ forge test
 ```shell
 forge fmt
 ```
+
+## ENS Integration Example
+
+Query the live `controlled-accounts.ecs.eth` deployment on Sepolia:
+
+```bash
+npm run query-ens
+```
+
+This demonstrates:
+- ✅ ENS name resolution using viem
+- ✅ Querying text records from CCResolver
+- ✅ Parsing YAML output
+- ✅ Decoding ERC-7930 addresses
+- ✅ Live verification of controlled accounts
+
+See [`scripts/README.md`](./scripts/README.md) for more details.

@@ -1,0 +1,27 @@
+{
+  "name": "associated-accounts",
+  "version": "1.0.0",
+  "description": "ERC-8092 Associated Accounts with CCResolver ENS integration",
+  "type": "module",
+  "scripts": {
+    "query-ens": "node scripts/query-ens.js",
+    "query-info": "node scripts/query-ens.js info"
+  },
+  "keywords": [
+    "ens",
+    "ethereum",
+    "erc-8092",
+    "associated-accounts",
+    "resolver"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.21.0",
+    "js-yaml": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
