@@ -1,55 +1,93 @@
-## Associated Accounts
+# Agent Delegations Hook Reference
 
-This specification defines a standard for establishing and verifying associations between accounts. This allows addresses to publicly declare and prove a relationship with other addresses, enabling use cases like sub-account identity inheritance, authorization delegation, and reputation collation. 
+This repository implements a complete **ECS + ENS Hook** flow for the Agent Delegations credential type built on top of **ERC‑8092 Associated Accounts**.
 
-This repo implements:
+The goal is to provide a repeatable pattern where:
 
-- **`AssociatedAccounts`** - The core interface defining the structs (`AssociatedAccountRecord` and `SignedAssociationRecord`), events, and storage functions for the ERC-8092 standard
-- **`AssociatedAccountsLib`** - A helper library providing validation, EIP-712 hashing, and signature verification utilities for Associated Account records
-- **`AssociationsStore`** - A reference implementation of an onchain storage contract for managing associations with features like account lookup, active association filtering, and revocation 
+1. An ENS profile publishes a Hook text record pointing to a resolver.
+2. The resolver indexes pre-existing ERC‑8092 delegations from an `AssociationsStore`.
+3. Clients discover the Hook, resolve it via ECS, and obtain a deterministic response envelope plus the raw credential payload.
 
-## Deployments
+## Repository layout
 
-The Associations Store has been deployed to Base Sepolia behind a Transparent Upgradeable Proxy. This instance of the store has been deployed behind a proxy so that small changes in the spec can be reflected in the implementation without needing to redeploy.
+| Path | Purpose |
+| ---- | ------- |
+| `src/AgentDelegationsResolver.sol` | Onchain resolver that indexes Agent Delegation SARs and serves them through ENS text/data selectors. |
+| `docs/pattern.md` | Pattern description covering hook grammar, request/response semantics, and flow diagrams. |
+| `examples/agent-delegations/resolveHook.ts` | TypeScript helper that demonstrates hook discovery → resolver calls (text + data). |
+| `offchain-resolver/server.ts` | Minimal HTTP server illustrating how an offchain resolver could respond with the same envelope schema. |
+| `script/DeployAgentDelegationsResolver.s.sol` | Foundry deployment script for the resolver. |
 
-| Contract | Address | Link |
-|----------|---------|------|
-| **Proxy** | `0x6f4D643BD9332d9Aa3a828576e3a64ccc58D2684` | [View on Sepolia BaseScan](https://sepolia.basescan.org/address/0x6f4D643BD9332d9Aa3a828576e3a64ccc58D2684) |
-| Implementation | `0x868C5e78c6bB86E3794d8c5beBf27941644722B7` | [View on Sepolia BaseScan](https://sepolia.basescan.org/address/0x868C5e78c6bB86E3794d8c5beBf27941644722B7) |
-| ProxyAdmin | `0x5650Ccf0B216826B5bCeCc9033691Ad515B1f5ad` | [View on Sepolia BaseScan](https://sepolia.basescan.org/address/0x5650Ccf0B216826B5bCeCc9033691Ad515B1f5ad) |
+## Hook format
 
-> **Note:** Always interact with the Proxy address. The implementation contract contains the logic, but the proxy maintains the state and is upgradeable. 
+- **ENS text record key**: configurable, defaults to `eth.ecs.agent-delegations:`
+- **Hook grammar**:
 
+  ```
+  hook("text(0x<namehash>,'eth.ecs.agent-delegations:0x<associationId>')",0x<ResolverAddress>)
+  ```
 
-## Documentation
+  - `associationId` is the ERC‑8092 association ID (32 bytes, hex).
 
-The ERC draft can be found in this PR (will update to canonical link once merged):
-https://github.com/ethereum/ERCs/pull/1377/files
+## Resolver outputs
 
-## Installation
+- `text(node, key)` → JSON envelope string:
 
-### As a Foundry dependency
+  ```json
+  {
+    "version": 1,
+    "associationId": "0x…",
+    "delegator": "0x…",
+    "agent": "0x…",
+    "payloadLen": 123,
+    "payloadHash": "0x…",
+    "payloadHex": "0x…"
+  }
+  ```
 
-```shell
-forge install stevieraykatz/AssociatedAccounts
+- `data(node, key)` → raw `bytes` returned as `0x…` hex (identical to `payloadHex`).
+
+The resolver validates the ERC‑8092 record (signatures, timestamps, interface ID) **at query time** using `AssociationsStore`. If validation fails, it returns an empty string/bytes to remain ENS compatible.
+
+## Getting started
+
+```bash
+pnpm install   # or npm install
+forge test --match-contract AgentDelegationsResolverTest
 ```
 
-## Development
+Run the hook resolution helper (requires an RPC URL and either an ENS name with a Hook or a literal Hook string):
 
-### Build
-
-```shell
-forge build
+```bash
+RPC_URL=https://sepolia.example \
+HOOK_VALUE='hook("text(0x...,''eth.ecs.agent-delegations:0x...'')",0xResolver)' \
+npm run example:agent-delegations
 ```
 
-### Test
+Use the offchain resolver stub (optional) to mock an HTTP target:
 
-```shell
-forge test
+```bash
+npm run offchain:server
 ```
 
-### Format
+## Deploying the resolver
 
-```shell
-forge fmt
+```bash
+cd /Users/ndeto/ECS
+forge script script/DeployAgentDelegationsResolver.s.sol:DeployAgentDelegationsResolver \
+  --rpc-url $RPC_URL \
+  --private-key $DEPLOYER_PRIVATE_KEY \
+  --broadcast
 ```
+
+Environment variables consumed by the script:
+
+| Name | Description |
+| ---- | ----------- |
+| `DEPLOYER_PRIVATE_KEY` | Hex private key used for broadcast. |
+| `ASSOCIATIONS_STORE_ADDRESS` | Address of the ERC‑8092 AssociationsStore containing SARs. |
+| `TEXT_RECORD_PREFIX` | Optional override for the resolver’s ENS key prefix (defaults to `eth.ecs.agent-delegations:`). |
+
+## Additional documentation
+
+See `docs/pattern.md` for a detailed walkthrough of the ENS hook grammar, ECS flow, and resolver response schemas. The TypeScript example illustrates how to parse hooks, query the resolver via ECS, and verify the returned payload hash.

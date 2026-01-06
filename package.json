@@ -1,0 +1,22 @@
+{
+  "name": "associated-accounts",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "example:controlled-accounts-ecs": "tsx examples/controlled-accounts-ecs/test-ecs.ts",
+    "example:controlled-accounts-hook": "tsx examples/controlled-accounts-hook/test-hook.ts",
+    "example:agent-delegations": "tsx examples/agent-delegations/resolveHook.ts",
+    "example:agent-delegations-ecs": "tsx examples/agent-delegations-ecs/test-ecs.ts",
+    "offchain:agent-delegations": "tsx agent-delegations/offchain-resolver/server.ts"
+  },
+  "dependencies": {
+    "@nxt3d/ecsjs": "^0.2.4",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
