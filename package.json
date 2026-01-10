@@ -11,7 +11,8 @@
     "offchain:agent-delegations": "tsx agent-delegations/offchain-resolver/server.ts"
   },
   "dependencies": {
-    "@nxt3d/ecsjs": "^0.2.4",
+    "@nxt3d/ecsjs": "git+https://github.com/ndeto/ecsjs.git#hotfix-registry-address",
+    "express": "^4.21.2",
     "viem": "^2.21.0"
   },
   "devDependencies": {

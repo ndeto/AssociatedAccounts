@@ -4,49 +4,62 @@ import {
   getResolverInfo,
   resolveCredential,
   sepolia,
-} from '@nxt3d/ecsjs'
+} from "/Users/ndeto/unruggable/ecsjs/src/index";
+
+export type AgentDelegationEntry = {
+  associationId: string;
+  agent: string;
+  payloadLen: number;
+  payloadHash: string;
+  payloadHex: string;
+};
 
 export type AgentDelegationEnvelope = {
-  version: number
-  associationId: string
-  delegator: string
-  agent: string
-  payload: unknown
-}
+  version: number;
+  delegationId: number;
+  delegator: string;
+  registeredAt: number;
+  delegations: AgentDelegationEntry[];
+};
 
 export type AgentDelegationsEcsResolution = {
-  resolver: `0x${string}`
-  label: string
-  ensName: string
-  ageInDays: number
-  review: string
-  credentialKey: string
-  envelope: AgentDelegationEnvelope
-  rawResponse: string
-}
+  resolver: `0x${string}`;
+  label: string;
+  ensName: string;
+  ageInDays: number;
+  review: string;
+  credentialKey: string;
+  envelope: AgentDelegationEnvelope;
+  rawResponse: string;
+};
 
 export type ParsedGenericTextHook = {
-  resolver: `0x${string}`
-}
+  resolver: `0x${string}`;
+  credentialKey: string;
+  delegationId: number | null;
+};
 
 export function parseGenericTextHook(hookValue: string): ParsedGenericTextHook {
-  const trimmed = hookValue.trim()
+  const trimmed = hookValue.trim();
 
-  if (!trimmed.startsWith('hook(')) {
-    throw new Error(`Text record is not a hook(): ${hookValue}`)
+  if (!trimmed.startsWith("hook(")) {
+    throw new Error(`Text record is not a hook(): ${hookValue}`);
   }
 
   const match = trimmed.match(
-    /^hook\(\s*"text\((0x[0-9a-fA-F]{64}),'([^']+)'\)"\s*,\s*(0x[0-9a-fA-F]{40})\s*\)\s*$/,
-  )
+    /^hook\(\s*"text\((0x[0-9a-fA-F]{64}),'([^']+)'\)"\s*,\s*(0x[0-9a-fA-F]{40})\s*\)\s*$/
+  );
   if (!match) {
-    throw new Error(`Unsupported ECS hook format: ${hookValue}`)
+    throw new Error(`Unsupported ECS hook format: ${hookValue}`);
   }
 
-  const resolverAddrRaw = match[3] as string
-  const resolver = resolverAddrRaw as `0x${string}`
+  const credentialKey = match[2];
+  const resolverAddrRaw = match[3] as string;
+  const resolver = resolverAddrRaw as `0x${string}`;
 
-  return { resolver }
+  const delegationId = parseDelegationIdFromKey(credentialKey);
+
+  return { resolver, credentialKey, delegationId };
 }
 
 /**
@@ -59,75 +72,92 @@ export function parseGenericTextHook(hookValue: string): ParsedGenericTextHook {
  * 4. Parse and return the delegation envelope JSON.
  */
 export async function resolveAgentDelegationViaEcs(params: {
-  profileName: string
-  associationId: `0x${string}`
-  rpcUrl: string
-  hookKey?: string
-  expectedLabel?: string
-  minResolverAgeDays?: number
+  profileName: string;
+  delegationId?: number;
+  rpcUrl: string;
+  hookKey?: string;
+  expectedLabel?: string;
+  minResolverAgeDays?: number;
 }): Promise<AgentDelegationsEcsResolution> {
   const {
     profileName,
-    associationId,
+    delegationId,
     rpcUrl,
-    hookKey = 'eth.ecs.agent-delegations.delegates',
-    expectedLabel = 'agent-delegations',
+    hookKey = "eth.ecs.agent-delegations.delegates",
+    expectedLabel = "agent-delegations",
     minResolverAgeDays = 0,
-  } = params
+  } = params;
 
   const client = createECSClient({
     chain: sepolia,
     rpcUrl,
-  })
+  });
 
   const hookValue = await client.getEnsText({
     name: profileName,
     key: hookKey,
-  })
+  });
 
   if (!hookValue) {
     throw new Error(
-      `No ECS hook text record set for key "${hookKey}" on ${profileName}`,
-    )
+      `No ECS hook text record set for key "${hookKey}" on ${profileName}`
+    );
   }
 
-  const { resolver } = parseGenericTextHook(hookValue)
+  const {
+    resolver,
+    credentialKey,
+    delegationId: hookDelegationId,
+  } = parseGenericTextHook(hookValue);
 
   const { label, resolverUpdated, review } = await getResolverInfo(
     client,
-    resolver,
-  )
-  const ageInDays = Math.floor(getResolverAge(resolverUpdated) / 86400)
+    resolver
+  );
+  const ageInDays = Math.floor(getResolverAge(resolverUpdated) / 86400);
 
   if (expectedLabel && label !== expectedLabel) {
     throw new Error(
-      `Unexpected ECS label "${label}" for resolver ${resolver} (expected "${expectedLabel}")`,
-    )
+      `Unexpected ECS label "${label}" for resolver ${resolver} (expected "${expectedLabel}")`
+    );
   }
 
   if (minResolverAgeDays > 0 && ageInDays < minResolverAgeDays) {
     throw new Error(
-      `ECS resolver "${label}.ecs.eth" (${resolver}) is too new: ${ageInDays} days old (minimum ${minResolverAgeDays} days required)`,
-    )
+      `ECS resolver "${label}.ecs.eth" (${resolver}) is too new: ${ageInDays} days old (minimum ${minResolverAgeDays} days required)`
+    );
   }
 
-  const ensName = `${label}.ecs.eth`
-  const credentialKey = `eth.ecs.agent-delegations:${associationId.toLowerCase()}`
+  const ensName = `${label}.ecs.eth`;
+  const resolvedDelegationId = delegationId ?? hookDelegationId;
+  if (resolvedDelegationId === null || resolvedDelegationId === undefined) {
+    throw new Error(
+      `Hook does not include a delegation ID. Pass delegationId explicitly for ${profileName}.`
+    );
+  }
+  const resolvedCredentialKey =
+    delegationId === undefined
+      ? credentialKey
+      : `eth.ecs.agent-delegations:${delegationId}`;
 
-  const resolved = await resolveCredential(client, resolver, credentialKey)
+  const resolved = await resolveCredential(
+    client,
+    resolver,
+    resolvedCredentialKey,
+  );
   if (!resolved) {
     throw new Error(
-      `No credential found for key "${credentialKey}" on ECS resolver "${ensName}" (${resolver})`,
-    )
+      `No credential found for key "${resolvedCredentialKey}" on ECS resolver "${ensName}" (${resolver})`
+    );
   }
 
-  let envelope: AgentDelegationEnvelope
+  let envelope: AgentDelegationEnvelope;
   try {
-    envelope = JSON.parse(resolved) as AgentDelegationEnvelope
+    envelope = JSON.parse(resolved) as AgentDelegationEnvelope;
   } catch (error) {
     throw new Error(
-      `Failed to parse agent delegation envelope JSON from resolver ${resolver}: ${(error as Error).message}`,
-    )
+      `Failed to parse agent delegation envelope JSON from resolver ${resolver}: ${(error as Error).message}`
+    );
   }
 
   return {
@@ -139,5 +169,14 @@ export async function resolveAgentDelegationViaEcs(params: {
     credentialKey,
     envelope,
     rawResponse: resolved,
-  }
+  };
+}
+
+function parseDelegationIdFromKey(key: string): number | null {
+  const prefix = "eth.ecs.agent-delegations:";
+  if (!key.startsWith(prefix)) return null;
+  const suffix = key.slice(prefix.length);
+  if (!suffix) return null;
+  if (!/^\d+$/.test(suffix)) return null;
+  return Number(suffix);
 }
