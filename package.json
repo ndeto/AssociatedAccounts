@@ -6,9 +6,9 @@
   "scripts": {
     "example:controlled-accounts-ecs": "tsx examples/controlled-accounts-ecs/test-ecs.ts",
     "example:controlled-accounts-hook": "tsx examples/controlled-accounts-hook/test-hook.ts",
-    "example:agent-delegations": "tsx examples/agent-delegations/resolveHook.ts",
-    "example:agent-delegations-ecs": "tsx examples/agent-delegations-ecs/test-ecs.ts",
-    "offchain:agent-delegations": "tsx agent-delegations/offchain-resolver/server.ts"
+    "example:agent-delegations": "tsx agent-delegations/examples/agent-delegations/resolveHook.ts",
+    "example:agent-delegations-ecs": "tsx agent-delegations/examples/agent-delegations-ecs/test-ecs.ts",
+    "offchain:agent-delegations": "npm --prefix agent-delegations/offchain-resolver run dev"
   },
   "dependencies": {
     "@nxt3d/ecsjs": "git+https://github.com/ndeto/ecsjs.git#hotfix-registry-address",

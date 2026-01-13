@@ -1,15 +1,15 @@
 ## Agent Delegations Resolver Demo
 
-This specification-level implementation shows how [ERC-8092](https://ethereum-magicians.org/t/erc-8092-associated-accounts/26858) and the proposed Agent Delegations ERC (interface ID `0xa9ce26a1`) can expose delegated agent relationships through ENS.
+This specification-level implementation shows how [ERC-8092](https://ethereum-magicians.org/t/erc-8092-associated-accounts/26858) and the proposed [Agent Delegations ERC](https://github.com/nxt3d/ERCs/blob/agent-delegations/ERCS/erc-agent-delegations.md) (interface ID `0xa9ce26a1`) can expose delegated agent relationships through ENS. For broader context, see the [main repository README](../README.md).
+
+In short: it stores signed ERC‑8092 associations, registers them in an ENS resolver, and serves a deterministic delegation envelope over `text()`/`resolve()`.
 
 ### Components
 
 - **`src/AgentDelegationsResolver.sol`**
-  - Permissionless `registerDelegation(bytes delegator, bytes[] agents)` resolves each pair’s association by fetching the ERC‑8092 SAR from `AssociationsStore`
-  - Queries `AssociationsStore` for the signed association record between delegator and agent
-  - Requires `interfaceId == 0xa9ce26a1`
-  - Returns an envelope JSON string via `text()` or ENS `resolve()` where the `payload` field contains the raw SAR `data` blob (opaque to the resolver)
-  - Uses the association ID (`eth.ecs.agent-delegations:0x<associationId>`) for resolver hooks while still providing helper views to enumerate delegations by delegator or by agent
+  - ENS resolver implementation of the Agent Delegations ERC.
+  - Validates ERC‑8092 SARs from `AssociationsStore` and returns deterministic envelopes via `text()`/`resolve()`.
+  - Behavior follows the Agent Delegations ERC specification (see link above).
 
 - **`script/DeployAgentDelegationsResolver.s.sol`**
   - Foundry script to deploy the resolver with:
@@ -20,46 +20,65 @@ This specification-level implementation shows how [ERC-8092](https://ethereum-ma
     ```
   - Requires `DEPLOYER_PRIVATE_KEY`, `ASSOCIATIONS_STORE_ADDRESS`, and optional `TEXT_RECORD_PREFIX`
 
+### Layered flow
+
+- **ENS Hook**: points to the L1 resolver and the `eth.ecs.agent-delegations:<id>` key so resolution can complete.
+- **L1 ENS resolver (Sepolia)**: `AgentDelegationsResolver.sol` answers `text()`/`resolve()` and emits CCIP‑Read requests.
+- **Offchain gateway (HTTP)**: `agent-delegations/offchain-resolver` bridges L1 → L2 via ERC‑3668 and returns the ABI‑encoded envelope.
+- **L2 credential source (Base Sepolia)**: SARs are stored in `AssociationsStore` and mapped in the L1 resolver via `registerDelegation`.
+
 ### Demo Flow
 
-1. **Create a Delegated Agent SAR**
-   - Store a SAR in `AssociationsStore` where:
-     - `initiator` is the delegator (owner)
-     - `approver` is the agent
-     - `interfaceId = 0xa9ce26a1`
-     - `data` contains the JSON payload defined by the Agent Delegations ERC, including `association`, `name`, `description`, and optional endpoints.
+1. **Write flow (setup)**
+   - Run `script/RegisterAgentDelegationsExample.s.sol` to:
+     - Store SARs in `AssociationsStore` (`initiator` = delegator, `approver` = agent, `interfaceId = 0xa9ce26a1`).
+     - Register the same agent list on `AgentDelegationsResolver` via `registerDelegation(bytes delegator, bytes[] agents)`.
+   - The script prints the ERC‑8092 `associationId` values and the ENS text record keys to query.
+   - Publish the ENS Hook text record that points to the resolver and `eth.ecs.agent-delegations:<associationId>`.
 
-2. **Register Delegations**
-   - Call `registerDelegation(bytes delegator, bytes[] agents)` on `AgentDelegationsResolver` to link the ENS resolver to existing ERC‑8092 records. Each returned ID is the ERC‑8092 associationId (bytes32).
-   - Use `getDelegationIds(bytes delegator)` to enumerate the associationIds for a delegator.
+2. **Resolve via ENS**
 
-3. **Resolve via ENS**
-   - Query `text(node, "eth.ecs.agent-delegations:0x<associationId>")` (or ENS `resolve()`) to receive an envelope JSON similar to:
-     ```json
-     {
-       "version": 1,
-       "associationId": "0x...",
-       "delegator": "0x...",
-       "agent": "0x...",
-       "payload": {
-         "association": "Delegated Agent",
-         "name": "Example Agent",
-         "description": "Delegated assistant",
-         "endpoints": [
-           {
-             "name": "A2A",
-             "endpoint": "https://agent.example/.well-known/agent-card.json"
-           }
-         ]
-       }
+   The diagram below illustrates the resolve flow:
+
+<p align="center">
+  <img width="50%" src="img/demoFlow.svg" alt="Agent delegations demo flow">
+</p>
+
+2. **Resolve via ENS**
+   - An autonomous agent queries the ENS name.
+   - ENS returns the Hook text record value, e.g. `hook("text(0x<namehash>,'eth.ecs.agent-delegations:<delegation_id>')",0x<resolver>)`.
+   - The hook resolves to the L1 ENS resolver (`AgentDelegationsResolver`) and calls `text()`.
+   - The L1 resolver triggers `OffchainLookup` (ERC‑3668) to the HTTP gateway.
+   - The gateway reads the L2 `AssociationsStore` on Base Sepolia.
+   - The gateway returns ABI‑encoded envelope data to the L1 resolver.
+   - The L1 resolver returns a verified delegation envelope to the agent.
+
+   The final `text(node, "eth.ecs.agent-delegations:0x<associationId>")` (or ENS `resolve()`) call yields an envelope JSON similar to:
+   ```json
+   {
+     "version": 1,
+     "associationId": "0x...",
+     "delegator": "0x...",
+     "agent": "0x...",
+     "payload": {
+       "association": "Delegated Agent",
+       "name": "Example Agent",
+       "description": "Delegated assistant",
+       "endpoints": [
+         {
+           "name": "A2A",
+           "endpoint": "https://agent.example/.well-known/agent-card.json"
+         }
+       ]
      }
-     ```
+   }
+   ```
 
-This demonstrates how ERC-8092’s cryptographic guarantees combine with the Agent Delegations ERC to publish verifiable agent delegations through ENS while deferring payload interpretation to offchain consumers. Consumers can navigate delegations via association IDs (bytes32) or the provided view helpers to list delegations by delegator or by agent.
+This demonstrates how agents can resolve and verify delegation credentials defined by ERC-8092 and its extensions from an ENS identity using ECS.
 
 ### Offchain Resolver Example
 
-`agent-delegations/offchain-resolver/server.ts` is a minimal HTTP target that emulates a CCIP-Read gateway. It accepts POST requests from an L1 offchain resolver and returns an ABI-encoded string containing the delegation envelope. Start it with:
+For the ECS demo flow, the offchain resolver is required because the ERC‑8092 AssociationsStore lives on Base. The gateway bridges the L1 resolver query to Base via [ERC‑3668 CCIP‑Read](https://eips.ethereum.org/EIPS/eip-3668) and returns the ABI‑encoded delegation envelope. Start it with:
 
 ```bash
 PORT=8787 npm run offchain:agent-delegations
@@ -67,16 +86,8 @@ PORT=8787 npm run offchain:agent-delegations
 
 Wire the URL into your L1 resolver’s `OffchainLookup` and the resolver will stream back the JSON payload.
 
-### ECS Example
+For more detailed and standardized ERC‑3668 CCIP‑Read behavior, refer to Unruggable Gateways.
 
-The `examples/agent-delegations-ecs` folder mirrors the controlled-accounts ECS demo and shows how to:
+### Examples
 
-1. Read the Hook text record on an ENS profile (`eth.ecs.agent-delegations.delegates`).
-2. Use `@nxt3d/ecsjs` to trust-evaluate the resolver registered for the `agent-delegations` label.
-3. Resolve the credential key `eth.ecs.agent-delegations:<delegationId>` by calling the resolver’s `text(node,key)` via ECS.
-
-Run it with:
-
-```bash
-RPC_URL="https://sepolia.infura.io/v3/YOUR_KEY" npm run example:agent-delegations-ecs
-```
+Detailed example walkthroughs live in [agent-delegations/examples/README.md](./examples/README.md).

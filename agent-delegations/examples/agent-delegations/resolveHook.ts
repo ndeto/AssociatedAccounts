@@ -23,7 +23,7 @@ type ParsedHook = {
 function parseHook(value: string): ParsedHook {
   const trimmed = value.trim()
   const hookRegex =
-    /^hook\(\s*"text\((0x[0-9a-fA-F]{64}),'(eth\.ecs\.agent-delegations:0x[0-9a-fA-F]{64})'\)"\s*,\s*(0x[0-9a-fA-F]{40})\s*\)$/
+    /^hook\(\s*"text\((0x[0-9a-fA-F]{64}),'([^']+)'\)"\s*,\s*(0x[0-9a-fA-F]{40})\s*\)$/
 
   const match = trimmed.match(hookRegex)
   if (!match) {

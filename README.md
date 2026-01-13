@@ -1,93 +1,67 @@
-# Agent Delegations Hook Reference
+# Resolver-Based Discovery of Agent Delegation Credentials
 
-This repository implements a complete **ECS + ENS Hook** flow for the Agent Delegations credential type built on top of **ERC‑8092 Associated Accounts**.
+An implementation of ERC-8092 Agent Delegations using ENS and ECS
 
-The goal is to provide a repeatable pattern where:
+This repository implements a resolver-based discovery pattern for **Agent Delegation credentials**, providing a concrete implementation of the Agent Delegations ERC built on top of [ERC-8092 Associated Accounts](https://ethereum-magicians.org/t/erc-8092-associated-accounts/26858) and surfaced through ENS and ECS.
 
-1. An ENS profile publishes a Hook text record pointing to a resolver.
-2. The resolver indexes pre-existing ERC‑8092 delegations from an `AssociationsStore`.
-3. Clients discover the Hook, resolve it via ECS, and obtain a deterministic response envelope plus the raw credential payload.
+Specification (draft): [Agent Delegations](https://github.com/nxt3d/ERCs/blob/agent-delegations/ERCS/erc-agent-delegations.md) Authored by Prem Makeig (premm.eth).
 
-## Repository layout
+## Why ENS
 
-| Path | Purpose |
-| ---- | ------- |
-| `src/AgentDelegationsResolver.sol` | Onchain resolver that indexes Agent Delegation SARs and serves them through ENS text/data selectors. |
-| `docs/pattern.md` | Pattern description covering hook grammar, request/response semantics, and flow diagrams. |
-| `examples/agent-delegations/resolveHook.ts` | TypeScript helper that demonstrates hook discovery → resolver calls (text + data). |
-| `offchain-resolver/server.ts` | Minimal HTTP server illustrating how an offchain resolver could respond with the same envelope schema. |
-| `script/DeployAgentDelegationsResolver.s.sol` | Foundry deployment script for the resolver. |
+ENS is used as the identity anchor and discovery surface.
 
-## Hook format
+An ENS name represents a stable, decentralized identity that both humans and agents can resolve. ENS already exposes native extensibility via text records and resolver logic, which makes it a natural place to publish delegation credentials without introducing new registries or discovery layers.
 
-- **ENS text record key**: configurable, defaults to `eth.ecs.agent-delegations:`
-- **Hook grammar**:
+This implementation leverages:
 
-  ```
-  hook("text(0x<namehash>,'eth.ecs.agent-delegations:0x<associationId>')",0x<ResolverAddress>)
-  ```
+- **ENS Hooks** ([ERC-8121](https://ethereum-magicians.org/t/erc-8121-delegated-metadata-resolution-via-hooks/27424)) as the native mechanism to point from an identity to a resolver
+- **ECS** ([ecs.vision](https://ecs.vision)) as the standardized resolution flow that interprets hooks, routes requests, and adds a security layer
+- **Resolvers** ([ENS resolver spec](https://docs.ens.domains/ensip/1#resolver-specification)) as the execution layer that extracts and validates delegation credentials
 
-  - `associationId` is the ERC‑8092 association ID (32 bytes, hex).
+ENS acts as the identity anchor. Delegation credentials are resolved via standard ENS resolver primitives, while ECS handles routing, execution of the hook, and security guarantees.
 
-## Resolver outputs
+## Problem
 
-- `text(node, key)` → JSON envelope string:
+In the agentic web, agents are first-class actors that must independently discover and verify delegated authority without relying on implicit trust or off-chain coordination.
 
-  ```json
-  {
-    "version": 1,
-    "associationId": "0x…",
-    "delegator": "0x…",
-    "agent": "0x…",
-    "payloadLen": 123,
-    "payloadHash": "0x…",
-    "payloadHex": "0x…"
-  }
-  ```
+This repository demonstrates a trustless, cryptographically provable mechanism for agent delegation discovery. Using ERC-8092 associations and the Agent Delegations ERC, agents can resolve, verify, and interpret delegated authority directly from an ENS-anchored identity, without relying on off-chain coordination or bespoke registries.
 
-- `data(node, key)` → raw `bytes` returned as `0x…` hex (identical to `payloadHex`).
+## What this repository provides
 
-The resolver validates the ERC‑8092 record (signatures, timestamps, interface ID) **at query time** using `AssociationsStore`. If validation fails, it returns an empty string/bytes to remain ENS compatible.
+A repeatable pattern where:
 
-## Getting started
+1. A **custom credential resolver** is deployed that implements standard ENS resolver primitives (e.g. `text(bytes32,string` and `data(bytes32,string)`) and resolves delegation credentials.
+2. An ENS profile publishes a Hook text record (per ERC-8121) that points to the resolver and specifies the credential query.
+3. Clients discover the Hook, resolve it via ECS, and invoke the resolver using standard ENS calls.
+4. The resolver validates and serves the underlying ERC-8092 Agent Delegation record(s) (query-time verification), returning a deterministic response envelope plus the raw credential payload.                                                                |
+
+## Start here
+
+[`docs/pattern.md`]('docs/pattern.md') is the core of this repo and the demo — it defines the hook grammar, resolver flow, and response schema that everything else implements.
+
+- `src/AgentDelegationsResolver.sol` - custom resolver that maps, validates, and returns agent delegation credentials from the ERC-8092 registry.
+- `agent-delegations/examples/agent-delegations/resolveHook.ts` is the minimal hook → resolver flow.
+- `agent-delegations/examples/agent-delegations-ecs/test-ecs.ts` shows the ECS-backed resolution path.
+- `agent-delegations/offchain-resolver` contains the offchain gateway implementation.
+
+## Run examples
+
+From the repo root, populate env files once and run the commands without inline vars:
+
+- `./.env` for repo-wide examples (RPC_URL, SEPOLIA_RPC_URL, HOOK_VALUE, ECS_GATEWAY_URL)
+- `./agent-delegations/offchain-resolver/.env.local` for the gateway
+- `./agent-delegations/offchain-resolver/.vercel/.env.*.local` for Vercel builds (copied by `vercel pull`)
+
+Install dependencies:
 
 ```bash
-pnpm install   # or npm install
-forge test --match-contract AgentDelegationsResolverTest
+npm install
 ```
 
-Run the hook resolution helper (requires an RPC URL and either an ENS name with a Hook or a literal Hook string):
-
 ```bash
-RPC_URL=https://sepolia.example \
-HOOK_VALUE='hook("text(0x...,''eth.ecs.agent-delegations:0x...'')",0xResolver)' \
 npm run example:agent-delegations
 ```
 
-Use the offchain resolver stub (optional) to mock an HTTP target:
-
 ```bash
-npm run offchain:server
+npm run example:agent-delegations-ecs
 ```
-
-## Deploying the resolver
-
-```bash
-cd /Users/ndeto/ECS
-forge script script/DeployAgentDelegationsResolver.s.sol:DeployAgentDelegationsResolver \
-  --rpc-url $RPC_URL \
-  --private-key $DEPLOYER_PRIVATE_KEY \
-  --broadcast
-```
-
-Environment variables consumed by the script:
-
-| Name | Description |
-| ---- | ----------- |
-| `DEPLOYER_PRIVATE_KEY` | Hex private key used for broadcast. |
-| `ASSOCIATIONS_STORE_ADDRESS` | Address of the ERC‑8092 AssociationsStore containing SARs. |
-| `TEXT_RECORD_PREFIX` | Optional override for the resolver’s ENS key prefix (defaults to `eth.ecs.agent-delegations:`). |
-
-## Additional documentation
-
-See `docs/pattern.md` for a detailed walkthrough of the ENS hook grammar, ECS flow, and resolver response schemas. The TypeScript example illustrates how to parse hooks, query the resolver via ECS, and verify the returned payload hash.
