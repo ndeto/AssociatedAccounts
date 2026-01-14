@@ -9,9 +9,10 @@ import {AssociatedAccountsLib} from "../src/AssociatedAccountsLib.sol";
 import {InteroperableAddress} from "../src/InteroperableAddresses.sol";
 import "../src/KeyTypes.sol";
 
-/// @notice Example script to register agent delegations.
-/// @dev Creates ERC-8092 SARs for a delegator -> agent pair and registers them in AgentDelegationsResolver.
-contract RegisterAgentDelegationsExampleScript is Script {
+/**
+ * @notice Create ERC-8092 SARs for a delegator->agent pair and register them in AgentDelegationsResolver.
+ */
+contract StoreAndRegisterAssociations is Script {
     using AssociatedAccountsLib for *;
 
     AssociationsStore public associationsStore;
@@ -31,8 +32,8 @@ contract RegisterAgentDelegationsExampleScript is Script {
     bytes4 internal constant AGENT_INTERFACE_ID = 0xa9ce26a1;
 
     function setUp() public {
-        associationsStore = AssociationsStore(vm.envAddress("ASSOCIATIONS_STORE_ADDRESS"));
-        agentResolver = AgentDelegationsResolver(vm.envAddress("AGENT_DELEGATIONS_RESOLVER_ADDRESS"));
+        associationsStore = AssociationsStore(vm.envAddress("BASE_SEPOLIA_ASSOCIATIONS_STORE_ADDRESS"));
+        agentResolver = AgentDelegationsResolver(vm.envAddress("BASE_SEPOLIA_AGENT_DELEGATIONS_RESOLVER_ADDRESS"));
 
         delegatorPrivateKey = vm.envUint("DELEGATOR_PRIVATE_KEY");
         agent1PrivateKey = vm.envUint("AGENT1_PRIVATE_KEY");
@@ -79,10 +80,7 @@ contract RegisterAgentDelegationsExampleScript is Script {
         );
 
         console2.log("\n=== Step 2: Registering Delegations in Resolver ===");
-        bytes[] memory agents = new bytes[](2);
-        agents[0] = agent1Account;
-        agents[1] = agent2Account;
-        bytes32[] memory registered = agentResolver.registerDelegation(delegatorAccount, agents);
+        uint256 delegationId = agentResolver.registerDelegations(associationIds);
 
         vm.stopBroadcast();
 
@@ -93,12 +91,13 @@ contract RegisterAgentDelegationsExampleScript is Script {
         console2.log("AssociationsStore:", address(associationsStore));
         console2.log("AgentResolver:", address(agentResolver));
         console2.log("Text Record Prefix:", agentResolver.textRecordPrefix());
-        for (uint256 i = 0; i < registered.length; i++) {
-            console2.log("  Association ID:", _bytes32ToHex(registered[i]));
-            console2.log(
-                "  Hook key:",
-                string.concat(agentResolver.textRecordPrefix(), _bytes32ToHex(registered[i]))
-            );
+        console2.log("  Delegation ID:", delegationId);
+        console2.log(
+            "  Hook key:",
+            string.concat(agentResolver.textRecordPrefix(), vm.toString(delegationId))
+        );
+        for (uint256 i = 0; i < associationIds.length; i++) {
+            console2.log("  Association ID:", _bytes32ToHex(associationIds[i]));
         }
     }
 

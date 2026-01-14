@@ -30,24 +30,30 @@ contract AgentDelegationsResolver is IExtendedResolver, IERC165 {
         uint256 registeredAt;
     }
 
+    struct DelegationGroup {
+        bytes delegator;
+        address registrant;
+        uint256 registeredAt;
+    }
+
     AssociationsStore public immutable associationsStore;
     string public textRecordPrefix;
     address public owner;
     mapping(bytes32 => Delegation) private delegations;
     mapping(bytes32 => bool) public delegationExists;
-    mapping(bytes32 => bytes32[]) private delegatorToAssociationIds;
-    mapping(bytes32 => bytes32[]) private agentToAssociationIds;
+    uint256 public nextDelegationId;
+    mapping(uint256 => DelegationGroup) private delegationGroups;
+    mapping(uint256 => bytes32[]) private delegationGroupAssociationIds;
 
     event DelegationRegistered(bytes32 indexed associationId, bytes delegator, bytes agent, address indexed registrar);
+    event DelegationGroupRegistered(
+        uint256 indexed delegationId, bytes delegator, bytes32[] associationIds, address indexed registrant
+    );
     event TextRecordPrefixUpdated(string newPrefix);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    error EmptyDelegation();
-    error NoAgentsProvided();
-    error DelegationNotFound(bytes32 associationId);
-    error AssociationRecordMissing(bytes32 delegatorHash, bytes32 agentHash);
+    error NoAssociationIds();
     error DelegationAlreadyRegistered(bytes32 associationId);
-    error InvalidAssociation(bytes32 associationId);
     error WrongAccountRoles(bytes32 associationId);
     error InvalidInterfaceId(bytes4 actual);
     error OnlyOwner();
@@ -63,49 +69,38 @@ contract AgentDelegationsResolver is IExtendedResolver, IERC165 {
         _;
     }
 
-    function registerDelegation(bytes calldata delegator, bytes[] calldata agents)
-        external
-        returns (bytes32[] memory ids)
-    {
-        if (delegator.length == 0) revert EmptyDelegation();
-        if (agents.length == 0) revert NoAgentsProvided();
+    /// @notice Register a batch of association ids and return the delegationId used in text record keys.
+    function registerDelegations(bytes32[] calldata associationIds) external returns (uint256 delegationId) {
+        if (associationIds.length == 0) revert NoAssociationIds();
 
-        ids = new bytes32[](agents.length);
-        for (uint256 i = 0; i < agents.length; i++) {
-            if (agents[i].length == 0) revert EmptyDelegation();
-            ids[i] = _storeDelegation(delegator, agents[i]);
+        delegationId = nextDelegationId++;
+        DelegationGroup storage group = delegationGroups[delegationId];
+        group.registrant = msg.sender;
+        group.registeredAt = block.timestamp;
+
+        bytes32[] storage groupAssociations = delegationGroupAssociationIds[delegationId];
+        bytes memory groupDelegator;
+
+        for (uint256 i = 0; i < associationIds.length; i++) {
+            bytes32 storedId = _storeDelegation(associationIds[i]);
+            Delegation storage delegation = delegations[storedId];
+
+            if (i == 0) {
+                groupDelegator = delegation.delegator;
+                group.delegator = groupDelegator;
+            } else if (keccak256(delegation.delegator) != keccak256(groupDelegator)) {
+                revert WrongAccountRoles(storedId);
+            }
+
+            groupAssociations.push(storedId);
         }
-    }
 
-    function getDelegation(bytes32 associationId) external view returns (Delegation memory) {
-        if (!delegationExists[associationId]) revert DelegationNotFound(associationId);
-        return delegations[associationId];
-    }
-
-    function getDelegationIds(bytes calldata delegator) external view returns (bytes32[] memory) {
-        return delegatorToAssociationIds[keccak256(delegator)];
-    }
-
-    function getDelegationIdsForAgent(bytes calldata agent) external view returns (bytes32[] memory) {
-        return agentToAssociationIds[keccak256(agent)];
-    }
-
-    function getAgentsForDelegator(bytes calldata delegator) external view returns (bytes[] memory agents) {
-        bytes32[] storage assocIds = delegatorToAssociationIds[keccak256(delegator)];
-        agents = new bytes[](assocIds.length);
-        for (uint256 i = 0; i < assocIds.length; i++) {
-            if (!delegationExists[assocIds[i]]) continue;
-            agents[i] = delegations[assocIds[i]].agent;
+        bytes32[] memory emittedIds = new bytes32[](groupAssociations.length);
+        for (uint256 i = 0; i < groupAssociations.length; i++) {
+            emittedIds[i] = groupAssociations[i];
         }
-    }
 
-    function getDelegatorsForAgent(bytes calldata agent) external view returns (bytes[] memory delegators) {
-        bytes32[] storage assocIds = agentToAssociationIds[keccak256(agent)];
-        delegators = new bytes[](assocIds.length);
-        for (uint256 i = 0; i < assocIds.length; i++) {
-            if (!delegationExists[assocIds[i]]) continue;
-            delegators[i] = delegations[assocIds[i]].delegator;
-        }
+        emit DelegationGroupRegistered(delegationId, group.delegator, emittedIds, msg.sender);
     }
 
     function setTextRecordPrefix(string calldata newPrefix) external onlyOwner {
@@ -148,10 +143,13 @@ contract AgentDelegationsResolver is IExtendedResolver, IERC165 {
         return _resolveData(key);
     }
 
-    function _storeDelegation(bytes calldata delegator, bytes calldata agent) internal returns (bytes32 associationId) {
-        AssociatedAccounts.SignedAssociationRecord memory sar = _fetchAssociationForRegistration(delegator, agent);
-        associationId = AssociatedAccountsLib.associationIdFromSAR(sar);
+    /// @dev Cache association metadata for later group resolution.
+    function _storeDelegation(bytes32 associationId) internal returns (bytes32) {
+        AssociatedAccounts.SignedAssociationRecord memory sar = _fetchAssociationForRegistration(associationId);
         if (delegationExists[associationId]) revert DelegationAlreadyRegistered(associationId);
+
+        bytes memory delegator = sar.record.initiator;
+        bytes memory agent = sar.record.approver;
 
         Delegation storage delegation = delegations[associationId];
         delegation.associationId = associationId;
@@ -160,185 +158,173 @@ contract AgentDelegationsResolver is IExtendedResolver, IERC165 {
         delegation.registeredAt = block.timestamp;
 
         delegationExists[associationId] = true;
-        delegatorToAssociationIds[keccak256(delegator)].push(associationId);
-        agentToAssociationIds[keccak256(agent)].push(associationId);
 
         emit DelegationRegistered(associationId, delegator, agent, msg.sender);
+        return associationId;
     }
 
+    /// @dev Resolve a text key into a delegation group envelope JSON.
     function _resolveText(string memory key) internal view returns (string memory) {
-        bytes32 associationId = _parseAssociationIdFromKey(key);
-        if (associationId == bytes32(0)) {
+        (bool parsed, uint256 delegationId) = _parseDelegationIdFromKey(key);
+        if (!parsed) {
             return "";
         }
-        (bool success, string memory envelope,) = _resolveDelegation(associationId);
+        (bool success, string memory envelope,) = _resolveDelegationGroup(delegationId);
         return success ? envelope : "";
     }
 
+    /// @dev Resolve a text key into ABI-encoded payloads for the delegation group.
     function _resolveData(string memory key) internal view returns (bytes memory) {
-        bytes32 associationId = _parseAssociationIdFromKey(key);
-        if (associationId == bytes32(0)) {
+        (bool parsed, uint256 delegationId) = _parseDelegationIdFromKey(key);
+        if (!parsed) {
             return bytes("");
         }
-        (bool success,, bytes memory payload) = _resolveDelegation(associationId);
+        (bool success,, bytes memory payload) = _resolveDelegationGroup(delegationId);
         return success ? payload : bytes("");
     }
 
-    function _parseAssociationIdFromKey(string memory key) internal view returns (bytes32 associationId) {
+    /// @dev Parse the delegationId from "<prefix><numericId>" text record keys.
+    function _parseDelegationIdFromKey(string memory key) internal view returns (bool, uint256) {
         bytes memory keyBytes = bytes(key);
         bytes memory prefixBytes = bytes(textRecordPrefix);
 
         if (keyBytes.length <= prefixBytes.length) {
-            return bytes32(0);
+            return (false, 0);
         }
 
         for (uint256 i = 0; i < prefixBytes.length; i++) {
             if (keyBytes[i] != prefixBytes[i]) {
-                return bytes32(0);
+                return (false, 0);
             }
         }
 
-        uint256 startIndex = prefixBytes.length;
-        if (keyBytes.length <= startIndex + 2) {
-            return bytes32(0);
-        }
-        if (keyBytes[startIndex] != '0' || keyBytes[startIndex + 1] != 'x') {
-            return bytes32(0);
-        }
-
-        uint256 hexLen = keyBytes.length - (startIndex + 2);
-        if (hexLen != 64) return bytes32(0);
-
-        bytes32 result;
-        for (uint256 i = 0; i < 64; i++) {
-            uint8 charCode = uint8(keyBytes[startIndex + 2 + i]);
-            uint8 value;
-            if (charCode >= 48 && charCode <= 57) {
-                value = charCode - 48;
-            } else if (charCode >= 97 && charCode <= 102) {
-                value = charCode - 87;
-            } else if (charCode >= 65 && charCode <= 70) {
-                value = charCode - 55;
+        uint256 result = 0;
+        bool hasDigits = false;
+        for (uint256 i = prefixBytes.length; i < keyBytes.length; i++) {
+            uint8 digit = uint8(keyBytes[i]);
+            if (digit >= 48 && digit <= 57) {
+                result = result * 10 + (digit - 48);
+                hasDigits = true;
             } else {
-                return bytes32(0);
+                return (false, 0);
             }
-            result = bytes32((uint256(result) << 4) | uint256(value));
         }
-        associationId = result;
+        if (!hasDigits) return (false, 0);
+        return (true, result);
     }
 
-    function _resolveDelegation(bytes32 associationId)
+    /// @dev Resolve a delegation group by validating each association id and building the JSON envelope.
+    function _resolveDelegationGroup(uint256 delegationId)
         internal
         view
         returns (bool success, string memory envelope, bytes memory payload)
     {
-        if (!delegationExists[associationId]) {
+        DelegationGroup storage group = delegationGroups[delegationId];
+        if (group.delegator.length == 0) {
             return (false, "", bytes(""));
         }
 
-        Delegation storage delegation = delegations[associationId];
-        (bool valid, AssociatedAccounts.SignedAssociationRecord memory sar) =
-            _loadAndValidateAssociation(delegation.delegator, delegation.agent);
-
-        if (!valid) {
+        bytes32[] storage groupAssociations = delegationGroupAssociationIds[delegationId];
+        if (groupAssociations.length == 0) {
             return (false, "", bytes(""));
         }
 
-        payload = sar.record.data;
-        envelope = _formatEnvelope(associationId, delegation.delegator, delegation.agent, payload);
+        bytes[] memory payloads = new bytes[](groupAssociations.length);
+        bytes memory entriesJson = bytes("[");
+
+        for (uint256 i = 0; i < groupAssociations.length; i++) {
+            bytes32 associationId = groupAssociations[i];
+            Delegation storage delegation = delegations[associationId];
+            (bool valid, AssociatedAccounts.SignedAssociationRecord memory sar) =
+                _loadAndValidateAssociation(associationId, delegation.delegator, delegation.agent);
+
+            if (!valid) {
+                return (false, "", bytes(""));
+            }
+
+            bytes memory entryPayload = sar.record.data;
+            payloads[i] = entryPayload;
+
+            entriesJson = abi.encodePacked(
+                entriesJson,
+                i == 0 ? "" : ",",
+                '{"associationId":"0x',
+                _bytesToHexString(abi.encodePacked(associationId)),
+                '","agent":"0x',
+                _bytesToHexString(delegation.agent),
+                '","payloadLen":',
+                Strings.toString(entryPayload.length),
+                ',"payloadHash":"0x',
+                _bytesToHexString(abi.encodePacked(keccak256(entryPayload))),
+                '","payloadHex":"0x',
+                _bytesToHexString(entryPayload),
+                '"}'
+            );
+        }
+
+        entriesJson = abi.encodePacked(entriesJson, "]");
+
+        envelope = string(
+            abi.encodePacked(
+                '{"version":1,"delegationId":',
+                Strings.toString(delegationId),
+                ',"delegator":"0x',
+                _bytesToHexString(group.delegator),
+                '","registeredAt":',
+                Strings.toString(group.registeredAt),
+                ',"delegations":',
+                entriesJson,
+                "}"
+            )
+        );
+
+        payload = abi.encode(payloads);
         return (true, envelope, payload);
     }
 
-    function _fetchAssociationForRegistration(bytes memory delegator, bytes memory agent)
+    /// @dev Fetch and validate the SAR during registration.
+    function _fetchAssociationForRegistration(bytes32 associationId)
         internal
         view
         returns (AssociatedAccounts.SignedAssociationRecord memory sar)
     {
-        (bool exists, AssociatedAccounts.SignedAssociationRecord memory stored) =
-            associationsStore.getAssociationBetweenAccounts(delegator, agent);
-
-        if (!exists) {
-            revert AssociationRecordMissing(keccak256(delegator), keccak256(agent));
+        sar = associationsStore.getAssociation(associationId);
+        if (sar.record.interfaceId != DELEGATED_AGENT_INTERFACE_ID) {
+            revert InvalidInterfaceId(sar.record.interfaceId);
         }
-
-        if (
-            keccak256(stored.record.initiator) != keccak256(delegator)
-                || keccak256(stored.record.approver) != keccak256(agent)
-        ) {
-            bytes32 associationId = AssociatedAccountsLib.associationIdFromSAR(stored);
-            revert WrongAccountRoles(associationId);
-        }
-
-        if (stored.record.interfaceId != DELEGATED_AGENT_INTERFACE_ID) {
-            revert InvalidInterfaceId(stored.record.interfaceId);
-        }
-
-        return stored;
+        return sar;
     }
 
-    function _loadAndValidateAssociation(bytes memory delegator, bytes memory agent)
+    /// @dev Load and validate SARs on read to ensure current validity.
+    function _loadAndValidateAssociation(bytes32 associationId, bytes memory delegator, bytes memory agent)
         internal
         view
         returns (bool, AssociatedAccounts.SignedAssociationRecord memory sar)
     {
-        (bool exists, AssociatedAccounts.SignedAssociationRecord memory stored) =
-            associationsStore.getAssociationBetweenAccounts(delegator, agent);
-
-        if (!exists) {
+        AssociatedAccounts.SignedAssociationRecord memory stored;
+        try associationsStore.getAssociation(associationId) returns (
+            AssociatedAccounts.SignedAssociationRecord memory fetched
+        ) {
+            stored = fetched;
+        } catch {
             return (false, stored);
         }
-
-        bytes32 associationId = AssociatedAccountsLib.associationIdFromSAR(stored);
-
         if (!stored.validateAssociatedAccount()) {
             return (false, stored);
         }
-
         if (
             keccak256(stored.record.initiator) != keccak256(delegator)
                 || keccak256(stored.record.approver) != keccak256(agent)
         ) {
             return (false, stored);
         }
-
         if (stored.record.interfaceId != DELEGATED_AGENT_INTERFACE_ID) {
             return (false, stored);
         }
-
         return (true, stored);
     }
 
-    function _formatEnvelope(bytes32 associationId, bytes memory delegator, bytes memory agent, bytes memory payload)
-        internal
-        pure
-        returns (string memory)
-    {
-        string memory associationIdHex =
-            string(abi.encodePacked("0x", _bytesToHexString(abi.encodePacked(associationId))));
-        string memory delegatorHex = string(abi.encodePacked("0x", _bytesToHexString(delegator)));
-        string memory agentHex = string(abi.encodePacked("0x", _bytesToHexString(agent)));
-        string memory payloadHex = string(abi.encodePacked("0x", _bytesToHexString(payload)));
-        string memory payloadHash = string(abi.encodePacked("0x", _bytesToHexString(abi.encodePacked(keccak256(payload)))));
-
-        return string(
-            abi.encodePacked(
-                '{"version":1,"associationId":"',
-                associationIdHex,
-                '","delegator":"',
-                delegatorHex,
-                '","agent":"',
-                agentHex,
-                '","payloadLen":',
-                Strings.toString(payload.length),
-                ',"payloadHash":"',
-                payloadHash,
-                '","payloadHex":"',
-                payloadHex,
-                '"}'
-            )
-        );
-    }
-
+    /// @dev Convert bytes to lowercase hex without 0x prefix.
     function _bytesToHexString(bytes memory input) internal pure returns (string memory) {
         bytes memory alphabet = "0123456789abcdef";
         bytes memory str = new bytes(input.length * 2);
@@ -348,5 +334,4 @@ contract AgentDelegationsResolver is IExtendedResolver, IERC165 {
         }
         return string(str);
     }
-
 }

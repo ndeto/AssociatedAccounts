@@ -5,7 +5,9 @@ import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 import {AgentDelegationsOffchainResolver} from "../src/AgentDelegationsOffchainResolver.sol";
 
-/// @notice Deploys the offchain resolver that emits ERC-3668 OffchainLookup.
+/**
+ * @notice Deploy the offchain resolver that emits ERC-3668 OffchainLookup.
+ */
 contract DeployAgentDelegationsOffchainResolver is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
