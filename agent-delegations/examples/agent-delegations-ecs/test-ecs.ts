@@ -1,6 +1,5 @@
 import 'dotenv/config'
 import { resolveAgentDelegationViaEcs } from './resolveAgentDelegationsEcs'
-import { rpc } from 'viem/utils'
 
 async function main() {
   // ENS profile name whose resolver stores the ECS hook text record
@@ -12,6 +11,10 @@ async function main() {
     throw new Error('SEPOLIA_RPC_URL environment variable is required')
   }
 
+  console.log('ECS quickstart')
+  console.log('  ENS profile:', profileName)
+  console.log('  Hook key:', 'eth.ecs.agent-delegations.delegates')
+
   const result = await resolveAgentDelegationViaEcs({
     profileName,
     rpcUrl,
@@ -20,23 +23,18 @@ async function main() {
     // minResolverAgeDays: 30,
   })
 
-  console.log('Agent delegation envelope JSON:')
+  console.log('\nAgent delegation envelope JSON:')
   console.log(JSON.stringify(result.envelope, null, 2))
-  console.log('\nDecoded payloads:')
+  console.log('\nDecoded payloads (payloadHex -> JSON):')
   result.envelope.delegations.forEach((entry, idx) => {
     const decoded = Buffer.from(entry.payloadHex.slice(2), 'hex').toString('utf8')
     try {
       const payload = JSON.parse(decoded)
-      console.log(`  [${idx}]`, payload)
+      console.log(`  [${idx}]`, JSON.stringify(payload, null, 2))
     } catch {
       console.log(`  [${idx}]`, decoded)
     }
   })
-  console.log('\nResolved via ECS resolver:', result.resolver)
-  console.log('ECS label:', result.label)
-  console.log('ECS ENS name:', result.ensName)
-  console.log('Resolver age (days):', result.ageInDays)
-  console.log('Resolver review status:', result.review || 'None')
 }
 
 main().catch((error) => {

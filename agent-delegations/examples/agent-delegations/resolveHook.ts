@@ -41,10 +41,10 @@ async function main() {
   const ensName = process.env.ENS_NAME
   const fallbackHook = process.env.HOOK_VALUE
   const hookKey = process.env.HOOK_KEY ?? 'eth.ecs.agent-delegations.delegates'
-  const rpcUrl = process.env.RPC_URL
+  const rpcUrl = process.env.SEPOLIA_RPC_URL
 
   if (!rpcUrl) {
-    throw new Error('RPC_URL environment variable is required')
+    throw new Error('SEPOLIA_RPC_URL environment variable is required')
   }
 
   const client = createPublicClient({

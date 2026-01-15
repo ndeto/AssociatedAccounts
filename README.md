@@ -1,10 +1,14 @@
 # Resolver-Based Discovery of Agent Delegation Credentials
 
-An implementation of the Agent Delegations ERC draft authored by Prem Makeig (`<premm.eth>`) using ENS and Ethereum Credential Service ([ECS](ecs.vision)).
+An implementation of the [Agent Delegations ERC](https://github.com/nxt3d/ERCs/blob/agent-delegations/ERCS/erc-agent-delegations.md) draft authored by Prem Makeig (`<premm.eth>`) using ENS and Ethereum Credential Service ([ECS](ecs.vision)).
 
 It builds on top of [ERC-8092 Associated Accounts](https://ethereum-magicians.org/t/erc-8092-associated-accounts/26858).
 
-Specification (draft): [Agent Delegations](https://github.com/nxt3d/ERCs/blob/agent-delegations/ERCS/erc-agent-delegations.md).
+## Problem
+
+In the agentic web, trutsless agents are first-class actors that must independently discover and verify delegated authority without relying on implicit trust or off-chain coordination.
+
+This repository demonstrates a cryptographically provable mechanism for agent delegation discovery. Using ERC-8092 associations and the Agent Delegations ERC, agents can trustlessly resolve, verify, and interpret delegated authority directly from an ENS-anchored identity.
 
 ## Why ENS
 
@@ -18,12 +22,6 @@ This implementation leverages:
 
 ENS acts as the identity anchor. Delegation credentials are resolved via standard ENS resolver primitives, while ECS handles routing, execution of the hook, and security guarantees.
 
-## Problem
-
-In the agentic web, trutsless agents are first-class actors that must independently discover and verify delegated authority without relying on implicit trust or off-chain coordination.
-
-This repository demonstrates a cryptographically provable mechanism for agent delegation discovery. Using ERC-8092 associations and the Agent Delegations ERC, agents can trustlessly resolve, verify, and interpret delegated authority directly from an ENS-anchored identity.
-
 ## What this repository provides
 
 A repeatable pattern where:
@@ -36,21 +34,18 @@ A repeatable pattern where:
 
 ## Start here
 
-[`docs/pattern`](docs/pattern/) is the core of this repo and the demo — it defines the hook grammar, resolver flow, and response schema that everything else implements.
-
 To run the ECS example:
+
+Set `SEPOLIA_RPC_URL` in the root `.env` file (required by the ECS example). Use `.env.example` as a quick start template.
 
 ```bash
 npm install
 npm run example:agent-delegations-ecs
 ```
 
-| Path | Purpose |
-| --- | --- |
-| `src/AgentDelegationsResolver.sol` | Custom resolver that indexes, validates, and returns agent delegation credentials from the ERC-8092 registry. |
-| `agent-delegations/examples/agent-delegations/resolveHook.ts` | Minimal hook → resolver flow. |
-| `agent-delegations/examples/agent-delegations-ecs/test-ecs.ts` | ECS-backed resolution path with trust and security checks. |
-| `agent-delegations/offchain-resolver` | Custom offchain gateway implementation used in this demo. |
+[`docs/pattern`](docs/pattern/) is the core of this repo and the demo — it defines the hook grammar, resolver flow, and response schema that everything else implements.
+
+For the demo’s technical specification, see the [pattern guide](docs/pattern/README.md) and the [Agent Delegations ERC](https://github.com/nxt3d/ERCs/blob/agent-delegations/ERCS/erc-agent-delegations.md).
 
 ## Deployments
 

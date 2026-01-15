@@ -59,6 +59,8 @@ export function parseGenericTextHook(hookValue: string): ParsedGenericTextHook {
 
   const delegationId = parseDelegationIdFromKey(credentialKey);
 
+  console.log("[ecs] Hook parsed:", { resolver, credentialKey, delegationId });
+
   return { resolver, credentialKey, delegationId };
 }
 
@@ -115,6 +117,8 @@ export async function resolveAgentDelegationViaEcs(params: {
     resolver
   );
   const ageInDays = Math.floor(getResolverAge(resolverUpdated) / 86400);
+
+  console.log("[ecs] ECS registry entry:", { label, resolverUpdated, review, ageInDays });
 
   if (expectedLabel && label !== expectedLabel) {
     throw new Error(

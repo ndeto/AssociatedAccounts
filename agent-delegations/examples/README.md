@@ -17,7 +17,7 @@ npm run example:agent-delegations
 The `agent-delegations/examples/agent-delegations-ecs` flow mirrors the controlled-accounts ECS demo and shows how to:
 
 1. Read the Hook text record on an ENS profile (`eth.ecs.agent-delegations.delegates`).
-2. Use `@nxt3d/ecsjs` to trust-evaluate the resolver registered for the `agent-delegations` label.
+2. Use [`@nxt3d/ecsjs`](https://www.npmjs.com/package/@nxt3d/ecsjs) to trust-evaluate the resolver registered for the `agent-delegations` label.
 3. Resolve the credential key `eth.ecs.agent-delegations:<delegationId>` by calling the resolver’s `text(node,key)` via ECS.
 
 Run from the repo root:
